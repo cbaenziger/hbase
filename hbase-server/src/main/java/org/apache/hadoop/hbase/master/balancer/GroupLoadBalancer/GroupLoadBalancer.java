@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.master.balancer.BaseLoadBalancer;
 import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
-
 /**
  * This load balancer partitions servers and tables into groups. Then, within each group, it uses
  * another load balancer to balance within each group.
@@ -143,16 +142,20 @@ public class GroupLoadBalancer extends BaseLoadBalancer {
 
     Map<HRegionInfo, ServerName> hriToServerNameMap = new HashMap<>();
     for (Map<ServerName, List<HRegionInfo>> clusterMapGroup : groupedClusterMap.values()) {
-      for (ServerName serverName : clusterMapGroup.keySet()) {
-        for (HRegionInfo hri : clusterMapGroup.get(serverName)) {
+      for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMapGroup.entrySet()) {
+        ServerName serverName = entry.getKey();
+        List<HRegionInfo> hriList = entry.getValue();
+        for (HRegionInfo hri : hriList) {
           hriToServerNameMap.put(hri, serverName);
         }
       }
     }
 
     List<RegionPlan> regionsToReconcile = new ArrayList<>();
-    for (ServerName serverName : clusterMap.keySet()) {
-      for (HRegionInfo hri : clusterMap.get(serverName)) {
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMap.entrySet()) {
+      ServerName serverName = entry.getKey();
+      List<HRegionInfo> hriList = entry.getValue();
+      for (HRegionInfo hri : hriList) {
         if (serverName != hriToServerNameMap.get(hri)) {
           RegionPlan regionPlan = new RegionPlan(hri, serverName, hriToServerNameMap.get(hri));
           regionsToReconcile.add(regionPlan);
