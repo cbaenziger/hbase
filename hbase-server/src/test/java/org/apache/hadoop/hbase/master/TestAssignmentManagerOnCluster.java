@@ -27,12 +27,16 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -530,7 +534,7 @@ public class TestAssignmentManagerOnCluster {
         desc.getTableName(), Bytes.toBytes("A"), Bytes.toBytes("Z"));
       MetaTableAccessor.addRegionToMeta(meta, hri);
 
-      MyLoadBalancer.controledRegion = hri.getEncodedName();
+      MyLoadBalancer.controledRegion = hri;
 
       HMaster master = TEST_UTIL.getHBaseCluster().getMaster();
       master.assignRegion(hri);
@@ -549,6 +553,105 @@ public class TestAssignmentManagerOnCluster {
       ServerName serverName = master.getAssignmentManager().
         getRegionStates().getRegionServerOfRegion(hri);
       TEST_UTIL.assertRegionOnServer(hri, serverName, 200);
+    } finally {
+      MyLoadBalancer.controledRegion = null;
+      TEST_UTIL.deleteTable(Bytes.toBytes(table));
+    }
+  }
+  
+  /**
+   * This tests round-robin assignment failed due to no bulkplan
+   */
+  @Test (timeout=60000)
+  public void testRoundRobinAssignmentFailed() throws Exception {
+    String table = "testRoundRobinAssignmentFailed";
+    try {
+      HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(table));
+      desc.addFamily(new HColumnDescriptor(FAMILY));
+      admin.createTable(desc);
+
+      HTable meta = new HTable(conf, TableName.META_TABLE_NAME);
+      HRegionInfo hri = new HRegionInfo(
+        desc.getTableName(), Bytes.toBytes("A"), Bytes.toBytes("Z"));
+      MetaTableAccessor.addRegionToMeta(meta, hri);
+
+      MyLoadBalancer.controledRegion = hri;
+
+      HMaster master = TEST_UTIL.getHBaseCluster().getMaster();
+      AssignmentManager am = master.getAssignmentManager();
+      // round-robin assignment but balancer cannot find a plan
+      // assignment should fail
+      am.assign(Arrays.asList(hri));
+
+      // if bulk assignment cannot update region state to online
+      // or failed_open this waits until timeout
+      assertFalse(am.waitForAssignment(hri));
+      RegionState state = am.getRegionStates().getRegionState(hri);
+      assertEquals(RegionState.State.FAILED_OPEN, state.getState());
+      // Failed to open since no plan, so it's on no server
+      assertNull(state.getServerName());
+
+      // try again with valid plan
+      MyLoadBalancer.controledRegion = null;
+      am.assign(Arrays.asList(hri));
+      assertTrue(am.waitForAssignment(hri));
+
+      ServerName serverName = master.getAssignmentManager().
+        getRegionStates().getRegionServerOfRegion(hri);
+      TEST_UTIL.assertRegionOnServer(hri, serverName, 200);
+    } finally {
+      MyLoadBalancer.controledRegion = null;
+      TEST_UTIL.deleteTable(Bytes.toBytes(table));
+    }
+  }
+  
+  /**
+   * This tests retain assignment failed due to no bulkplan
+   */
+  @Test (timeout=60000)
+  public void testRetainAssignmentFailed() throws Exception {
+    String table = "testRetainAssignmentFailed";
+    try {
+      HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(table));
+      desc.addFamily(new HColumnDescriptor(FAMILY));
+      admin.createTable(desc);
+
+      HTable meta = new HTable(conf, TableName.META_TABLE_NAME);
+      HRegionInfo hri = new HRegionInfo(
+        desc.getTableName(), Bytes.toBytes("A"), Bytes.toBytes("Z"));
+      MetaTableAccessor.addRegionToMeta(meta, hri);
+
+      MyLoadBalancer.controledRegion = hri;
+
+      HMaster master = TEST_UTIL.getHBaseCluster().getMaster();
+      AssignmentManager am = master.getAssignmentManager();
+
+      Map<HRegionInfo, ServerName> regions = new HashMap<HRegionInfo, ServerName>();
+      ServerName dest = TEST_UTIL.getHBaseCluster().getRegionServer(0).getServerName();
+      regions.put(hri, dest);
+      // retainAssignment but balancer cannot find a plan
+      // assignment should fail
+      am.assign(regions);
+
+      // if retain assignment cannot update region state to online
+      // or failed_open this waits until timeout
+      assertFalse(am.waitForAssignment(hri));
+      RegionState state = am.getRegionStates().getRegionState(hri);
+      assertEquals(RegionState.State.FAILED_OPEN, state.getState());
+      // Failed to open since no plan, so it's on no server
+      assertNull(state.getServerName());
+
+      // try retainAssigment again with valid plan
+      MyLoadBalancer.controledRegion = null;
+      am.assign(regions);
+      assertTrue(am.waitForAssignment(hri));
+
+      ServerName serverName = master.getAssignmentManager().
+        getRegionStates().getRegionServerOfRegion(hri);
+      TEST_UTIL.assertRegionOnServer(hri, serverName, 200);
+      
+      // it retains on same server as specified
+      assertEquals(serverName, dest);
     } finally {
       MyLoadBalancer.controledRegion = null;
       TEST_UTIL.deleteTable(Bytes.toBytes(table));
@@ -1174,7 +1277,7 @@ public class TestAssignmentManagerOnCluster {
   
   static class MyLoadBalancer extends StochasticLoadBalancer {
     // For this region, if specified, always assign to nowhere
-    static volatile String controledRegion = null;
+    static volatile HRegionInfo controledRegion = null;
 
     static volatile Integer countRegionServers = null;
     static AtomicInteger counter = new AtomicInteger(0);
@@ -1182,7 +1285,7 @@ public class TestAssignmentManagerOnCluster {
     @Override
     public ServerName randomAssignment(HRegionInfo regionInfo,
         List<ServerName> servers) {
-      if (regionInfo.getEncodedName().equals(controledRegion)) {
+      if (regionInfo.equals(controledRegion)) {
         return null;
       }
       return super.randomAssignment(regionInfo, servers);
@@ -1200,7 +1303,25 @@ public class TestAssignmentManagerOnCluster {
           return null;
         }
       }
+      if (regions.get(0).equals(controledRegion)) {
+        Map<ServerName, List<HRegionInfo>> m = Maps.newHashMap();
+        m.put(LoadBalancer.BOGUS_SERVER_NAME, regions);
+        return m;
+      }
       return super.roundRobinAssignment(regions, servers);
+    }
+
+    @Override
+    public Map<ServerName, List<HRegionInfo>> retainAssignment(
+        Map<HRegionInfo, ServerName> regions, List<ServerName> servers) {
+      for (HRegionInfo hri : regions.keySet()) {
+        if (hri.equals(controledRegion)) {
+          Map<ServerName, List<HRegionInfo>> m = Maps.newHashMap();
+          m.put(LoadBalancer.BOGUS_SERVER_NAME, Lists.newArrayList(regions.keySet()));
+          return m;
+        }
+      }
+      return super.retainAssignment(regions, servers);
     }
   }
 

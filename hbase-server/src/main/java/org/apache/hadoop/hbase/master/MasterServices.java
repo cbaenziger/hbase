@@ -261,4 +261,9 @@ public interface MasterServices extends Server {
    * @throws IOException
    */
   public List<TableName> listTableNamesByNamespace(String name) throws IOException;
+
+  /**
+   * @return load balancer
+   */
+  public LoadBalancer getLoadBalancer();
 }

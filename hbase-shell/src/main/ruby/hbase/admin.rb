@@ -386,6 +386,27 @@ module Hbase
       splits = h_table.getRegionLocations().keys().map{|i| Bytes.toString(i.getStartKey)}.delete_if{|k| k == ""}.to_java :String
       splits = org.apache.hadoop.hbase.util.Bytes.toByteArrays(splits)
       table_description = h_table.getTableDescriptor()
+
+      #clone group
+      if(groups_available?(conf))
+      	group_admin =  org.apache.hadoop.hbase.group.GroupAdminClient.new(@conf)
+      	group_info = group_admin.getGroupInfoOfTable(table_name)
+        exp_group = group_info.getName
+        if(exp_group == "default")
+          exp_group = nil;
+        end
+        ns =
+            @admin.getNamespaceDescriptor(
+                org.apache.hadoop.hbase.TableName.valueOf(table_name).getNamespaceAsString)
+        ns_group =
+          ns.getValue(org.apache.hadoop.hbase.group.GroupInfo::NAMESPACEDESC_PROP_GROUP)
+        if(!exp_group.nil? && ns_group.nil?|| (ns_group != exp_group))
+          yield " - Preserving explicit group assignment to #{exp_group}" if block_given?
+          table_description.setValue(org.apache.hadoop.hbase.group.GroupInfo::TABLEDESC_PROP_GROUP,
+          group_info.getName())
+        end
+      end
+
       yield 'Disabling table...' if block_given?
       disable(table_name)
 

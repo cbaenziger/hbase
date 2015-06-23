@@ -408,8 +408,8 @@ public class AccessController extends BaseMasterAndRegionObserver
    * @throws IOException if obtaining the current user fails
    * @throws AccessDeniedException if user has no authorization
    */
-  private void requirePermission(String request, TableName tableName, byte[] family, byte[] qualifier,
-      Action... permissions) throws IOException {
+  public void requirePermission(String request, TableName tableName, byte[] family,
+                                byte[] qualifier, Action... permissions) throws IOException {
     User user = getActiveUser();
     AuthResult result = null;
 

@@ -45,6 +45,10 @@ module Hbase
       ::Hbase::Admin.new(configuration, formatter)
     end
 
+    def group_admin(formatter)
+      ::Hbase::GroupAdmin.new(configuration, formatter)
+    end
+
     # Create new one each time
     def table(table, shell)
       ::Hbase::Table.new(configuration, table, shell)

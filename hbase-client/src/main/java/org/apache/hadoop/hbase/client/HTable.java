@@ -1094,7 +1094,16 @@ public class HTable implements HTableInterface, RegionLocator {
           regionMutationBuilder.setAtomic(true);
           MultiRequest request =
             MultiRequest.newBuilder().addRegionAction(regionMutationBuilder.build()).build();
-          getStub().multi(controller, request);
+          ClientProtos.MultiResponse resp = getStub().multi(controller, request);
+
+           ClientProtos.RegionActionResult res = resp.getRegionActionResultList().get(0);
+           if (res.hasException()) {
+             Throwable ex = ProtobufUtil.toException(res.getException());
+             if(ex instanceof IOException) {
+               throw (IOException)ex;
+             }
+             throw new IOException("Failed to mutate row", ex);
+           }
         } catch (ServiceException se) {
           throw ProtobufUtil.getRemoteException(se);
         }

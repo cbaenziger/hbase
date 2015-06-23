@@ -1011,7 +1011,7 @@ public class AssignmentManager {
           setEnabledTable(tableName);
         }
         LOG.info("Assigning " + region.getRegionNameAsString() +
-            " to " + plan.getDestination().toString());
+            " to " + plan.getDestination());
         // Transition RegionState to PENDING_OPEN
        regionStates.updateRegionState(region,
           State.PENDING_OPEN, plan.getDestination());
@@ -1190,8 +1190,7 @@ public class AssignmentManager {
           || existingPlan.getDestination() == null
           || !destServers.contains(existingPlan.getDestination())) {
         newPlan = true;
-        randomPlan = new RegionPlan(region, null,
-            balancer.randomAssignment(region, destServers));
+        randomPlan = new RegionPlan(region, null, balancer.randomAssignment(region, destServers));
         if (!region.isMetaTable() && shouldAssignRegionsWithFavoredNodes) {
           List<HRegionInfo> regions = new ArrayList<HRegionInfo>(1);
           regions.add(region);
@@ -1383,6 +1382,14 @@ public class AssignmentManager {
       throw new IOException("Unable to determine a plan to assign region(s)");
     }
 
+    if (bulkPlan.containsKey(LoadBalancer.BOGUS_SERVER_NAME)) {
+      // Found no plan for some regions, put those regions in RIT
+      for (HRegionInfo hri : bulkPlan.get(LoadBalancer.BOGUS_SERVER_NAME)) {
+        regionStates.updateRegionState(hri, State.FAILED_OPEN);
+      }
+      bulkPlan.remove(LoadBalancer.BOGUS_SERVER_NAME);
+    }
+
     assign(regions.size(), servers.size(),
       "retainAssignment=true", bulkPlan);
   }
@@ -1411,6 +1418,14 @@ public class AssignmentManager {
       = balancer.roundRobinAssignment(regions, servers);
     if (bulkPlan == null) {
       throw new IOException("Unable to determine a plan to assign region(s)");
+    }
+
+    if (bulkPlan.containsKey(LoadBalancer.BOGUS_SERVER_NAME)) {
+      // Found no plan for some regions, put those regions in RIT
+      for (HRegionInfo hri : bulkPlan.get(LoadBalancer.BOGUS_SERVER_NAME)) {
+        regionStates.updateRegionState(hri, State.FAILED_OPEN);
+      }
+      bulkPlan.remove(LoadBalancer.BOGUS_SERVER_NAME);
     }
 
     processFavoredNodes(regions);

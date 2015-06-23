@@ -1095,11 +1095,17 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
       final byte[] destServerName) throws HBaseIOException {
     RegionState regionState = assignmentManager.getRegionStates().
       getRegionState(Bytes.toString(encodedRegionName));
-    if (regionState == null) {
+
+    HRegionInfo hri;
+    if (Bytes.toString(encodedRegionName)
+        .equals(HRegionInfo.FIRST_META_REGIONINFO.getEncodedName())) {
+      hri = HRegionInfo.FIRST_META_REGIONINFO;
+    } else if (regionState != null) {
+      hri = regionState.getRegion();
+    } else {
       throw new UnknownRegionException(Bytes.toStringBinary(encodedRegionName));
     }
 
-    HRegionInfo hri = regionState.getRegion();
     ServerName dest;
     if (destServerName == null || destServerName.length == 0) {
       LOG.info("Passed destination servername is null/empty so " +
@@ -1112,7 +1118,12 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
         return;
       }
     } else {
-      dest = ServerName.valueOf(Bytes.toString(destServerName));
+      ServerName candidate = ServerName.valueOf(Bytes.toString(destServerName));
+      dest = balancer.randomAssignment(hri, Lists.newArrayList(candidate));
+      if (dest == null) {
+        LOG.debug("Unable to determine a plan to assign " + hri);
+        return;
+      }
       if (dest.equals(serverName) && balancer instanceof BaseLoadBalancer
           && !((BaseLoadBalancer)balancer).shouldBeOnMaster(hri)) {
         // To avoid unnecessary region moving later by balancer. Don't put user
@@ -1959,5 +1970,10 @@ public class HMaster extends HRegionServer implements MasterServices, Server {
       tableNames.add(descriptor.getTableName());
     }
     return tableNames;
+  }
+
+  @Override
+  public LoadBalancer getLoadBalancer() {
+    return balancer;
   }
 }
