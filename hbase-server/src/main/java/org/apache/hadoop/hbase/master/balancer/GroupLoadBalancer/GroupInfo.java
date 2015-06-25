@@ -22,8 +22,6 @@ package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
 import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.TableName;
-import org.codehaus.jackson.annotate.JsonCreator;
-import org.codehaus.jackson.annotate.JsonProperty;
 
 import java.io.Serializable;
 import java.util.Collection;
@@ -34,11 +32,6 @@ import java.util.TreeSet;
  * Stores the group information of region server groups.
  */
 public class GroupInfo implements Serializable {
-
-  public static final String DEFAULT_GROUP = "default";
-  public static final String NAMESPACEDESC_PROP_GROUP = "hbase.rsgroup.name";
-  public static final String TABLEDESC_PROP_GROUP = "hbase.rsgroup.name";
-  public static final String TRANSITION_GROUP_PREFIX = "_transition_";
 
   private String name;
   private NavigableSet<String> servers;
@@ -57,12 +50,12 @@ public class GroupInfo implements Serializable {
   }
 
   /**
-   * Get group name.
+   * Get the name of the group.
    *
-   * @return
+   * @return the group name
    */
   public String getName() {
-    return name;
+    return this.name;
   }
 
   /**
@@ -71,77 +64,85 @@ public class GroupInfo implements Serializable {
    * @param hostPort the server
    */
   public void addServer(String hostPort){
-    servers.add(hostPort);
+    this.servers.add(hostPort);
   }
 
   /**
-   * Adds a group of servers.
+   * Adds a collection of servers to the group.
    *
-   * @param hostPort the servers
+   * @param hostPort the collection of servers
    */
   public void addAllServers(Collection<String> hostPort){
-    servers.addAll(hostPort);
+    this.servers.addAll(hostPort);
   }
 
   /**
-   * @param hostPort
+   * Checks to see if the group contains the server.
+   *
+   * @param hostPort the IP address and port of server
    * @return true, if a server with hostPort is found
    */
   public boolean containsServer(String hostPort) {
-    return servers.contains(hostPort);
+    return this.servers.contains(hostPort);
   }
 
   /**
-   * Get list of servers.
+   * Get list of servers in the group.
    *
-   * @return
+   * @return a list of servers
    */
   public NavigableSet<String> getServers() {
-    return servers;
+    return this.servers;
   }
 
   /**
-   * Remove a server from this group.
+   * Get all the tables in the group.
    *
-   * @param hostPort
-   */
-  public boolean removeServer(String hostPort) {
-    return servers.remove(hostPort);
-  }
-
-  /**
-   * Set of tables that are members of this group
-   * @return
+   * @return a list of tables
    */
   public NavigableSet<TableName> getTables() {
-    return tables;
+    return this.tables;
   }
 
+  /**
+   * Add a table to the group.
+   *
+   * @param table the table
+   */
   public void addTable(TableName table) {
-    tables.add(table);
+    this.tables.add(table);
   }
 
-  public void addAllTables(Collection<TableName> arg) {
-    tables.addAll(arg);
+  /**
+   * Add a collection of tables to the group.
+   *
+   * @param tables the tables
+   */
+  public void addAllTables(Collection<TableName> tables) {
+    this.tables.addAll(tables);
   }
 
+  /**
+   * Check to see if a group contains a table
+   *
+   * @param table the table
+   * @return returns true if the group contains the table
+   */
   public boolean containsTable(TableName table) {
-    return tables.contains(table);
-  }
-
-  public boolean removeTable(TableName table) {
-    return tables.remove(table);
+    return this.tables.contains(table);
   }
 
   @Override
   public String toString() {
-    StringBuffer sb = new StringBuffer();
-    sb.append("GroupName:");
-    sb.append(this.name);
-    sb.append(", ");
-    sb.append(" Servers:");
-    sb.append(this.servers);
-    return sb.toString();
+    StringBuilder stringBuilder = new StringBuilder();
+    stringBuilder.append("GroupName:");
+    stringBuilder.append(this.name);
+    stringBuilder.append(", ");
+    stringBuilder.append(" Servers:");
+    stringBuilder.append(this.servers);
+    stringBuilder.append(" Tables: ");
+    stringBuilder.append(this.tables);
+    return stringBuilder.toString();
 
   }
 
@@ -152,11 +153,9 @@ public class GroupInfo implements Serializable {
 
     GroupInfo groupInfo = (GroupInfo) o;
 
-    if (!name.equals(groupInfo.name)) return false;
-    if (!servers.equals(groupInfo.servers)) return false;
-    if (!tables.equals(groupInfo.tables)) return false;
-
-    return true;
+    return this.name.equals(groupInfo.name) &&
+        this.servers.equals(groupInfo.servers) &&
+        this.tables.equals(groupInfo.tables);
   }
 
   @Override

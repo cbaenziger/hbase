@@ -31,13 +31,6 @@ import java.util.Set;
  * See {@link GroupBasedLoadBalancer}
  */
 public interface GroupInfoManager {
-  //Assigned before user tables
-  public static final TableName GROUP_TABLE_NAME =
-      TableName.valueOf(NamespaceDescriptor.SYSTEM_NAMESPACE_NAME_STR, "rsgroup");
-  public static final byte[] GROUP_TABLE_NAME_BYTES = GROUP_TABLE_NAME.toBytes();
-  public static final String groupZNode = "groupInfo";
-  public static final byte[] META_FAMILY_BYTES = Bytes.toBytes("m");
-  public static final byte[] ROW_KEY = { 0 };
 
   /**
    * Adds the group.
@@ -87,7 +80,7 @@ public interface GroupInfoManager {
    * @return Group name of table
    * @throws java.io.IOException
    */
-  String getGroupOfTable(TableName tableName) throws IOException;
+  GroupInfo getGroupOfTable(TableName tableName) throws IOException;
 
   /**
    * Set the group membership of a set of tables
