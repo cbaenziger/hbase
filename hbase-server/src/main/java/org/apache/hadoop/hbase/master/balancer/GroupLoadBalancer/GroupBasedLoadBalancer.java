@@ -16,17 +16,22 @@
 package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.classification.InterfaceAudience;
 import org.apache.hadoop.hbase.HBaseInterfaceAudience;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.master.LoadBalancer;
+import org.apache.hadoop.hbase.master.MasterServices;
 import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.master.balancer.BaseLoadBalancer;
 import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
@@ -68,7 +73,9 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
 
   private static final Log LOG = LogFactory.getLog(GroupLoadBalancer.class);
 
-  private GroupLoadBalancerConfiguration groupLoadBalancerConfiguration;
+  private GroupInfoManagerImpl groupInfoManager;
+  private LoadBalancer internalBalancer;
+  private MasterServices masterServices;
 
   @Override
   public void onConfigurationChange(Configuration conf) {
@@ -78,7 +85,7 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
   @Override
   public synchronized void setConf(Configuration conf) {
     super.setConf(conf);
-    this.groupLoadBalancerConfiguration = new GroupLoadBalancerConfiguration(conf);
+    this.groupInfoManager = new GroupInfoManagerImpl(conf);
   }
 
   @Override
@@ -98,76 +105,124 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
       return regionsToReturn;
     }
 
-    this.groupLoadBalancerConfiguration.putUnassignedServersAndTablesInDefaultGroup(clusterMap);
+    // we need to add all the servers and tables that were not placed in the default group
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMap.entrySet()) {
+      ServerName serverName = entry.getKey();
+      List<HRegionInfo> hriList = entry.getValue();
 
-    GroupLoadBalancerGroupedClusterFactory groupLoadBalancerGroupedClusters =
-        new GroupLoadBalancerGroupedClusterFactory(groupLoadBalancerConfiguration, clusterMap);
-    Map<String, Map<ServerName, List<HRegionInfo>>> groupedClusterMap =
-        groupLoadBalancerGroupedClusters.getGroupedClusters();
+      String defaultGroupName = this.groupInfoManager.getDefaultGroupName();
 
-    regionsToReturn = new ArrayList<>();
+      try {
+        if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort()) == null) {
+          this.groupInfoManager.getGroup(defaultGroupName).addServer(serverName.getHostAndPort());
+        }
+      } catch (Exception e) {
+        LOG.debug("Error putting server " + serverName.getHostAndPort() + " in the default group.");
+      }
 
-    List<RegionPlan> regionsToReconcile =
-        reconcileToGroupConfiguration(groupedClusterMap, clusterMap);
-
-    if (regionsToReconcile != null) {
-      regionsToReturn.addAll(regionsToReconcile);
+      for (HRegionInfo hri : hriList) {
+        try {
+          if (this.groupInfoManager.getGroupOfTable(hri.getTable()) == null) {
+            this.groupInfoManager.getGroup(defaultGroupName).addTable(hri.getTable());
+          }
+        } catch (Exception e) {
+          LOG.debug("Error putting region " + hri + " in the default group.");
+        }
+      }
     }
 
-    // Use another load balancer to do the actual balancing
-    for (Map<ServerName, List<HRegionInfo>> cluster : groupedClusterMap.values()) {
-      SimpleLoadBalancer simpleLoadBalancer = new SimpleLoadBalancer();
-      List<RegionPlan> regionsToReturnForGroup = simpleLoadBalancer.balanceCluster(cluster);
-      if (regionsToReturnForGroup != null) {
-        regionsToReturn.addAll(simpleLoadBalancer.balanceCluster(cluster));
+    Map<ServerName, List<HRegionInfo>> correctedClusterMap = correctAssignments(clusterMap);
+    regionsToReturn = new ArrayList<>();
+
+
+    // Balance regions group by group
+    try {
+      for (GroupInfo currentGroupInfo : this.groupInfoManager.listGroups()) {
+        Map<ServerName, List<HRegionInfo>> groupClusterMap = new HashMap<>();
+        for (Map.Entry<ServerName, List<HRegionInfo>> entry : correctedClusterMap.entrySet()) {
+          ServerName serverName = entry.getKey();
+          List<HRegionInfo> hriList = entry.getValue();
+          if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort())
+              == currentGroupInfo) {
+            groupClusterMap.put(serverName, new LinkedList<HRegionInfo>());
+          }
+
+          for (HRegionInfo hri : hriList) {
+            if (this.groupInfoManager.getGroupOfTable(hri.getTable()) == currentGroupInfo) {
+              groupClusterMap.get(serverName).add(hri);
+            }
+          }
+        }
+
+        List<RegionPlan> groupRegionsToReturn =
+            this.internalBalancer.balanceCluster(groupClusterMap);
+        if (groupRegionsToReturn != null) {
+          regionsToReturn.addAll(groupRegionsToReturn);
+        }
       }
+    } catch (Exception e) {
+      LOG.warn("Exception while balancing cluster.", e);
+      regionsToReturn.clear();
     }
 
     return regionsToReturn;
   }
 
-  private GroupInfoManager populateGroupInfoManagerFromConfig(Configuration conf) {
-    return null;
+  @Override
+  public void initialize() throws HBaseIOException {
+    this.internalBalancer = new SimpleLoadBalancer();
+  }
+
+  @Override
+  public void setMasterServices(MasterServices masterServices) {
+    this.masterServices = masterServices;
   }
 
   /**
-   * If there is a mismatch between the groupedClusterMap and clusterMap regarding which tables
-   * belongs on which servers, then create a list of region plans so that the tables are moved to
-   * the servers which are specified by groupedClusterMap.
-   *
-   * @param groupedClusterMap a clusterMap which as been partitioned by groups
-   * @param clusterMap a mapping of servers and a list of regions which they hold
-   * @return a list of region plans which move regions around so that the regions which are placed
-   * on the servers in clusterMap are the same as what is specified in groupedClusterMap
+   * If a region is assigned to a server in the wrong group, unassign it so it is assigned to a
+   * a server in the right one.
+   * @param existingAssignments a map of servers and the regions that it holds
+   * @return a map of servers and regions within it that belongs to the same group
    */
-  public List<RegionPlan> reconcileToGroupConfiguration(
-      Map<String, Map<ServerName, List<HRegionInfo>>> groupedClusterMap,
-      Map<ServerName, List<HRegionInfo>> clusterMap) {
+  private Map<ServerName, List<HRegionInfo>> correctAssignments(
+      Map<ServerName, List<HRegionInfo>> existingAssignments) {
 
-    Map<HRegionInfo, ServerName> hriToServerNameMap = new HashMap<>();
-    for (Map<ServerName, List<HRegionInfo>> clusterMapGroup : groupedClusterMap.values()) {
-      for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMapGroup.entrySet()) {
-        ServerName serverName = entry.getKey();
-        List<HRegionInfo> hriList = entry.getValue();
-        for (HRegionInfo hri : hriList) {
-          hriToServerNameMap.put(hri, serverName);
-        }
-      }
-    }
+    Map<ServerName, List<HRegionInfo>> correctAssignments = new TreeMap<>();
 
-    List<RegionPlan> regionsToReconcile = new ArrayList<>();
-    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMap.entrySet()) {
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : existingAssignments.entrySet()) {
+
       ServerName serverName = entry.getKey();
       List<HRegionInfo> hriList = entry.getValue();
+
+      correctAssignments.put(serverName, new LinkedList<HRegionInfo>());
+
       for (HRegionInfo hri : hriList) {
-        if (serverName != hriToServerNameMap.get(hri)) {
-          RegionPlan regionPlan = new RegionPlan(hri, serverName, hriToServerNameMap.get(hri));
-          regionsToReconcile.add(regionPlan);
+
+        GroupInfo groupRegionShouldBelongsTo = null;
+        try {
+          groupRegionShouldBelongsTo = groupInfoManager.getGroupOfTable(hri.getTable());
+        } catch (Exception e) {
+          LOG.debug("Error getting information for region " + hri, e);
         }
+        GroupInfo groupRegionActuallyBelongsTo = null;
+        try {
+          groupRegionActuallyBelongsTo = groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
+        } catch (Exception e) {
+          LOG.debug("Error getting information for server " + serverName, e);
+        }
+
+        if (groupRegionActuallyBelongsTo != groupRegionShouldBelongsTo) {
+          // unassign it so it is assigned to a server in the right group
+          this.masterServices.getAssignmentManager().unassign(hri);
+        } else {
+          correctAssignments.get(serverName).add(hri);
+        }
+
       }
     }
 
-    return regionsToReconcile;
+    return correctAssignments;
 
   }
+
 }

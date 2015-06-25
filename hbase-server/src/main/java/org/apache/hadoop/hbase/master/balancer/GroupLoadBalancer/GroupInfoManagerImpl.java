@@ -55,7 +55,7 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
   private volatile Map<String, GroupInfo> groupMap;
   private String defaultGroupName;
 
-  public GroupInfoManagerImpl(Configuration conf) throws IOException {
+  public GroupInfoManagerImpl(Configuration conf) {
     this.groupMap = new HashMap<>();
     populateGroupInfoManagerFromConf(conf);
   }
@@ -66,7 +66,7 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @param groupInfo the group name
    * @throws IOException
    */
-  @Override public synchronized void addGroup(GroupInfo groupInfo) throws IOException {
+  @Override public synchronized void addGroup(GroupInfo groupInfo) {
     if (groupMap.containsKey(groupInfo.getName())) {
       throw new IllegalArgumentException("Group already exists: " + groupInfo.getName());
     }
@@ -95,10 +95,7 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
         return groupInfo;
       }
     }
-    // Server has not been assigned to a group, so add it to the default one
-    GroupInfo defaultGroupInfo = this.groupMap.get(this.defaultGroupName);
-    defaultGroupInfo.addServer(hostPort);
-    return defaultGroupInfo;
+    return null;
   }
 
   /**
@@ -126,10 +123,7 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
         return groupInfo;
       }
     }
-    // Table has not been assigned to a group, so add it to the default one
-    GroupInfo defaultGroupInfo = this.groupMap.get(this.defaultGroupName);
-    defaultGroupInfo.addTable(tableName);
-    return  defaultGroupInfo;
+    return null;
   }
 
   /**
@@ -194,7 +188,7 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @param config the configuration file
    * @throws IOException
    */
-  private void populateGroupInfoManagerFromConf(Configuration config) throws IOException {
+  private void populateGroupInfoManagerFromConf(Configuration config) {
 
     String groupNamesString = config.get(GROUPS);
     String[] groupNamesArray = groupNamesString.split(GROUP_DELIMITER);
@@ -233,11 +227,7 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
         groupInfo.addTable(TableName.valueOf(tableNameString));
       }
 
-      try {
-        addGroup(groupInfo);
-      } catch (Exception e) {
-        throw new IOException("Error creating group: " + e.getMessage());
-      }
+      addGroup(groupInfo);
 
     }
 
