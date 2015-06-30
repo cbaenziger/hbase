@@ -68,7 +68,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 @InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG) public class GroupBasedLoadBalancer
     extends BaseLoadBalancer {
 
-  private static final Log LOG = LogFactory.getLog(GroupLoadBalancer.class);
+  private static final Log LOG = LogFactory.getLog(GroupBasedLoadBalancer.class);
 
   private GroupInfoManagerImpl groupInfoManager;
   private LoadBalancer internalBalancer;
