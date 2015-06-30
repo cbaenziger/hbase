@@ -17,9 +17,7 @@
 
 package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
-import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
 import java.util.List;
