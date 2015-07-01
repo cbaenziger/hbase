@@ -304,6 +304,18 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
     LOG.info("**************** group based load balancer randomAssignment *******************");
 
+    LOG.info("hri " + hri);
+    LOG.info("serverNameList " + serverNameList);
+
+    if (serverNameList != null && serverNameList.contains(masterServerName)) {
+      if (shouldBeOnMaster(hri)) {
+        return masterServerName;
+      }
+      serverNameList = new ArrayList<>(serverNameList);
+      // Guarantee not to put other regions on master
+      serverNameList.remove(masterServerName);
+    }
+
     try {
       ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
       ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
