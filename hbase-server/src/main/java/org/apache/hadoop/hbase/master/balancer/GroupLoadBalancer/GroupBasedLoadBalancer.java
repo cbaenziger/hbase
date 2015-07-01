@@ -93,7 +93,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
   @Override public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterMap) {
 
-    LOG.info("**************** USING GROUP LOAD BALANCER *******************");
+    LOG.info("**************** using group based load balancer *******************");
 
     // don't balance master
     if (masterServerName != null && clusterMap.containsKey(masterServerName)) {
@@ -170,7 +170,10 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   }
 
   @Override public void initialize() throws HBaseIOException {
-    // TODO: Get internalBalancer class from config
+
+    LOG.info("**************** initializing group based load balancer *******************");
+
+    // TODO: Get internalBalan cer class from config
     this.internalBalancer = new SimpleLoadBalancer();
     this.internalBalancer.setClusterStatus(clusterStatus);
     this.internalBalancer.setMasterServices(masterServices);
@@ -188,6 +191,8 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   @Override
   public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> hriList,
       List<ServerName> serverNameList) {
+
+    LOG.info("**************** group based load balancer roundRobinAssignment *******************");
 
     Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
     ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
@@ -213,6 +218,8 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   @Override
   public Map<ServerName, List<HRegionInfo>> retainAssignment(Map<HRegionInfo, ServerName> hriMap,
       List<ServerName> serverList) {
+
+    LOG.info("**************** group based load balancer retainAssignment *******************");
 
     try {
       Map<ServerName, List<HRegionInfo>> assignments = new TreeMap<>();
@@ -272,6 +279,8 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   @Override public Map<HRegionInfo, ServerName> immediateAssignment(List<HRegionInfo> hriList,
       List<ServerName> serverNameList) {
 
+    LOG.info("**************** group based load balancer immediateAssignment *******************");
+
     try {
       Map<HRegionInfo, ServerName> assignments = new HashMap<>();
       ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
@@ -292,6 +301,9 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
   @Override
   public ServerName randomAssignment(HRegionInfo hri, List<ServerName> serverNameList) {
+
+    LOG.info("**************** group based load balancer randomAssignment *******************");
+
     try {
       ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
       ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
