@@ -392,25 +392,16 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   private void generateGroupMaps(List<HRegionInfo> regions, List<ServerName> servers,
       ListMultimap<String, HRegionInfo> regionMap, ListMultimap<String, ServerName> serverMap) {
     try {
-
-      LOG.info("regions " + regions);
-      LOG.info("servers " + servers);
-
       // put all regions in regionMap
       for (HRegionInfo region : regions) {
-
         GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
         String groupName = (groupInfo == null)? null : groupInfo.getName();
-
-        LOG.info("region " + region);
-        LOG.info("groupName " + groupName);
-
         // if a table doesn't belong to a group put it in the default group
         if (groupName == null) {
           groupName = groupInfoManager.getDefaultGroupName();
           groupInfoManager.getGroup(groupName).addTable(region.getTable());
           LOG.info("The region " + region +
-              " was not put in a table, so it was placed in the default group");
+              " was not put in a group, so it was placed in the default group");
         }
         regionMap.put(groupName, region);
       }
@@ -424,7 +415,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
           groupName = groupInfoManager.getDefaultGroupName();
           groupInfoManager.getGroup(groupName).addServer(serverName.getHostAndPort());
           LOG.info("The server " + serverName +
-              " was not put in a table, so it was placed in the default group");
+              " was not put in a group, so it was placed in the default group");
         }
         serverMap.put(groupName, serverName);
       }
