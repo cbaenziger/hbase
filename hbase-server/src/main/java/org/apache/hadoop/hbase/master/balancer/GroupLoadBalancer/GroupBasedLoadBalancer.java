@@ -28,6 +28,7 @@ import java.util.TreeMap;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -179,9 +180,9 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
     this.internalBalancer.setMasterServices(masterServices);
     this.internalBalancer.setConf(config);
     this.internalBalancer.initialize();
-    if (groupInfoManager == null) {
+    if (this.groupInfoManager == null) {
       try {
-        groupInfoManager = new GroupInfoManagerImpl(config);
+        this.groupInfoManager = new GroupInfoManagerImpl(this.config);
       } catch (Exception e) {
         throw new HBaseIOException("Failed to load group info manager.", e);
       }
@@ -303,9 +304,10 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
 
     LOG.info("**************** group based load balancer randomAssignment *******************");
-
-    LOG.info("regionInfo " + regionInfo);
-    LOG.info("servers " + servers);
+//    LOG.info("this.groupInfoManager " + this.groupInfoManager);
+//
+//    LOG.info("regionInfo " + regionInfo);
+//    LOG.info("servers " + servers);
 
     if (servers != null && servers.contains(masterServerName)) {
       if (shouldBeOnMaster(regionInfo)) {
@@ -319,7 +321,11 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
     try {
       ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
       ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
-      generateGroupMaps(new ArrayList<HRegionInfo>(), servers, regionMap, serverMap);
+      generateGroupMaps(Lists.newArrayList(regionInfo), servers, regionMap, serverMap);
+
+      LOG.info("regionMap " + regionMap);
+      LOG.info("serverMap " + serverMap);
+
       List<ServerName> filteredServers = serverMap.get(regionMap.keySet().iterator().next());
       return this.internalBalancer.randomAssignment(regionInfo, filteredServers);
     } catch(Exception e) {
@@ -343,17 +349,17 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
     for (Map.Entry<ServerName, List<HRegionInfo>> entry : existingAssignments.entrySet()) {
 
       ServerName serverName = entry.getKey();
-      List<HRegionInfo> hriList = entry.getValue();
+      List<HRegionInfo> regions = entry.getValue();
 
       correctAssignments.put(serverName, new LinkedList<HRegionInfo>());
 
-      for (HRegionInfo hri : hriList) {
+      for (HRegionInfo region : regions) {
 
         GroupInfo groupRegionShouldBelongsTo = null;
         try {
-          groupRegionShouldBelongsTo = groupInfoManager.getGroupOfTable(hri.getTable());
+          groupRegionShouldBelongsTo = groupInfoManager.getGroupOfTable(region.getTable());
         } catch (Exception e) {
-          LOG.debug("Error getting information for region " + hri, e);
+          LOG.debug("Error getting information for region " + region, e);
         }
         GroupInfo groupRegionActuallyBelongsTo = null;
         try {
@@ -365,9 +371,9 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
         if (groupRegionActuallyBelongsTo != groupRegionShouldBelongsTo) {
           // unassign it so it is assigned to a server in the right group
-          this.masterServices.getAssignmentManager().unassign(hri);
+          this.masterServices.getAssignmentManager().unassign(region);
         } else {
-          correctAssignments.get(serverName).add(hri);
+          correctAssignments.get(serverName).add(region);
         }
 
       }
@@ -387,9 +393,18 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
       ListMultimap<String, HRegionInfo> regionMap, ListMultimap<String, ServerName> serverMap) {
     try {
 
+      LOG.info("regions " + regions);
+      LOG.info("servers " + servers);
+
       // put all regions in regionMap
       for (HRegionInfo region : regions) {
-        String groupName = groupInfoManager.getGroupOfTable(region.getTable()).getName();
+
+        GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
+        String groupName = (groupInfo == null)? null : groupInfo.getName();
+
+        LOG.info("region " + region);
+        LOG.info("groupName " + groupName);
+
         // if a table doesn't belong to a group put it in the default group
         if (groupName == null) {
           groupName = groupInfoManager.getDefaultGroupName();
@@ -402,7 +417,8 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
       // put all servers in serverMap
       for (ServerName serverName : servers) {
-        String groupName = groupInfoManager.getGroupOfServer(serverName.getHostAndPort()).getName();
+        GroupInfo groupInfo = groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
+        String groupName = (groupInfo == null)? null : groupInfo.getName();
         // if a table doesn't belong in a group put it in the default group
         if (groupName == null) {
           groupName = groupInfoManager.getDefaultGroupName();

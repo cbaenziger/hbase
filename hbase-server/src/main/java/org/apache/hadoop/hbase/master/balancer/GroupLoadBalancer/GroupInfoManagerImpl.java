@@ -179,6 +179,13 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
     throw new IllegalArgumentException("This method should not be called.");
   }
 
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("Default group name: " + this.defaultGroupName + "\n");
+    sb.append("Groups:\n" + this.groupMap);
+    return sb.toString();
+  }
+
   public String getDefaultGroupName() {
     return this.defaultGroupName;
   }
