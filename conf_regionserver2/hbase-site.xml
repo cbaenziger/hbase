@@ -51,6 +51,6 @@
 	</property>
 	<property>
 		<name>hbase.master.loadbalancer.class</name>
-		<value>org.apache.hadoop.hbase.master.balancer.GroupLoadBalancer</value>
+		<value>org.apache.hadoop.hbase.master.balancer.grouploadbalancer</value>
 	</property>
 </configuration>

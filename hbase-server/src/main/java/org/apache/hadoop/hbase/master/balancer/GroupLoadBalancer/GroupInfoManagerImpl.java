@@ -90,11 +90,6 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @throws IOException
    */
   @Override public GroupInfo getGroupOfServer(String hostPort) throws IOException {
-
-    LOG.info("getGroupOfServer for " + hostPort);
-    LOG.info("groupMap " + groupMap);
-
-
     for (GroupInfo groupInfo : groupMap.values()) {
       if (groupInfo.containsServer(hostPort)) {
         return groupInfo;

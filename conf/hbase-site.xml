@@ -49,7 +49,7 @@
     <name>hbase.regionserver.info.port</name>
     <value>60030</value>
   </property>
-	<property>
+	<!-- <property>
 		<name>hbase.master.loadbalancer.class</name>
 		<value>org.apache.hadoop.hbase.master.balancer.grouploadbalancer.GroupBasedLoadBalancer</value>
 	</property>
@@ -76,5 +76,5 @@
 	<property>
 		<name>hbase.master.balancer.grouploadbalancer.tablegroups.group2</name>
 		<value>my_ns:namespace_table;test</value>
-	</property>
+	</property> -->
 </configuration>
