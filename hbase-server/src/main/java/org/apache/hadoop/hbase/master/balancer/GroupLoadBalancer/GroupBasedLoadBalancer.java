@@ -188,72 +188,72 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
       }
     }
   }
-//
-//  @Override
-//  public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
-//
-//    LOG.info("**************** group based load balancer randomAssignment *******************");
-//    LOG.info("regionInfo " + regionInfo + " servers " + servers);
-//
-//    if (servers != null && servers.contains(masterServerName)) {
-//      if (shouldBeOnMaster(regionInfo)) {
-//        return masterServerName;
-//      }
-//      servers = new ArrayList<>(servers);
-//      // Guarantee not to put other regions on master
-//      servers.remove(masterServerName);
-//    }
-//
-//    try {
-//      ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
-//      ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
-//      generateGroupMaps(Lists.newArrayList(regionInfo), servers, regionMap, serverMap);
-//
-//      LOG.info("regionMap " + regionMap);
-//      LOG.info("serverMap " + serverMap);
-//
-//      List<ServerName> filteredServers = serverMap.get(regionMap.keySet().iterator().next());
-//
-//      ServerName serverToReturn =
-//          this.internalBalancer.randomAssignment(regionInfo, filteredServers);
-//      LOG.info("randomAssignment regionInfo " + regionInfo + " being put on server " + serverToReturn);
-//      return serverToReturn;
-//
-//      //      return this.internalBalancer.randomAssignment(regionInfo, filteredServers);
-//    } catch(Exception e) {
-//      LOG.warn("Failed to do random assignment.", e);
-//    }
-//    return null;
-//  }
-//
-//  @Override
-//  public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
-//      List<ServerName> servers) {
-//
-//    LOG.info("**************** group based load balancer roundRobinAssignment *******************");
-//    LOG.info("regions " + regions + " servers " + servers);
-//
-//    Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
-//    ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
-//    ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
-//
-//    try {
-//      generateGroupMaps(regions, servers, regionMap, serverMap);
-//      for (String groupName : regionMap.keySet()) {
-//        if (regionMap.get(groupName).size() > 0) {
-//          Map<ServerName, List<HRegionInfo>> result = this.internalBalancer
-//              .roundRobinAssignment(regionMap.get(groupName), serverMap.get(groupName));
-//          if (result != null) {
-//            assignments.putAll(result);
-//          }
-//        }
-//      }
-//    } catch (HBaseIOException e) {
-//      LOG.warn("Error with round robin assignments.", e);
-//    }
-//    LOG.info("roundRobinAssignment returns " + assignments);
-//    return assignments;
-//  }
+
+  @Override
+  public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
+
+    LOG.info("**************** group based load balancer randomAssignment *******************");
+    LOG.info("regionInfo " + regionInfo + " servers " + servers);
+
+    if (servers != null && servers.contains(masterServerName)) {
+      if (shouldBeOnMaster(regionInfo)) {
+        return masterServerName;
+      }
+      servers = new ArrayList<>(servers);
+      // Guarantee not to put other regions on master
+      servers.remove(masterServerName);
+    }
+
+    try {
+      ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+      ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+      generateGroupMaps(Lists.newArrayList(regionInfo), servers, regionMap, serverMap);
+
+      LOG.info("regionMap " + regionMap);
+      LOG.info("serverMap " + serverMap);
+
+      List<ServerName> filteredServers = serverMap.get(regionMap.keySet().iterator().next());
+
+      ServerName serverToReturn =
+          this.internalBalancer.randomAssignment(regionInfo, filteredServers);
+      LOG.info("randomAssignment regionInfo " + regionInfo + " being put on server " + serverToReturn);
+      return serverToReturn;
+
+      //      return this.internalBalancer.randomAssignment(regionInfo, filteredServers);
+    } catch(Exception e) {
+      LOG.warn("Failed to do random assignment.", e);
+    }
+    return null;
+  }
+
+  @Override
+  public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
+      List<ServerName> servers) {
+
+    LOG.info("**************** group based load balancer roundRobinAssignment *******************");
+    LOG.info("regions " + regions + " servers " + servers);
+
+    Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
+    ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+    ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+
+    try {
+      generateGroupMaps(regions, servers, regionMap, serverMap);
+      for (String groupName : regionMap.keySet()) {
+        if (regionMap.get(groupName).size() > 0) {
+          Map<ServerName, List<HRegionInfo>> result = this.internalBalancer
+              .roundRobinAssignment(regionMap.get(groupName), serverMap.get(groupName));
+          if (result != null) {
+            assignments.putAll(result);
+          }
+        }
+      }
+    } catch (HBaseIOException e) {
+      LOG.warn("Error with round robin assignments.", e);
+    }
+    LOG.info("roundRobinAssignment returns " + assignments);
+    return assignments;
+  }
 //
 //  @Override
 //  public Map<ServerName, List<HRegionInfo>> retainAssignment(Map<HRegionInfo, ServerName> regions,
@@ -389,49 +389,49 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
     }
     return correctAssignments;
   }
-//
-//  /**
-//   * Populates regionMap and serverMap so that regions and servers of the same group are together.
-//   *
-//   * @param regions        a list of all the regions
-//   * @param servers a list of all the servers
-//   * @param regionMap      a mapping of group names as a string to the regions it contains
-//   * @param serverMap      a mapping of group names as a string to the servers it contains
-//   */
-//  private void generateGroupMaps(List<HRegionInfo> regions, List<ServerName> servers,
-//      ListMultimap<String, HRegionInfo> regionMap, ListMultimap<String, ServerName> serverMap) {
-//    try {
-//      // put all regions in regionMap
-//      for (HRegionInfo region : regions) {
-//        GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
-//        String groupName = (groupInfo == null)? null : groupInfo.getName();
-//        // if a table doesn't belong to a group put it in the default group
-//        if (groupName == null) {
-//          groupName = groupInfoManager.getDefaultGroupName();
-//          groupInfoManager.getGroup(groupName).addTable(region.getTable());
-//          LOG.info("The region " + region +
-//              " was not put in a group, so it was placed in the default group");
-//        }
-//        regionMap.put(groupName, region);
-//      }
-//
-//      // put all servers in serverMap
-//      for (ServerName serverName : servers) {
-//        GroupInfo groupInfo = groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
-//        String groupName = (groupInfo == null)? null : groupInfo.getName();
-//        // if a table doesn't belong in a group put it in the default group
-//        if (groupName == null) {
-//          groupName = groupInfoManager.getDefaultGroupName();
-//          groupInfoManager.getGroup(groupName).addServer(serverName.getHostAndPort());
-//          LOG.info("The server " + serverName +
-//              " was not put in a group, so it was placed in the default group");
-//        }
-//        serverMap.put(groupName, serverName);
-//      }
-//    } catch (IOException e) {
-//      LOG.warn("Failed to generate group maps.", e);
-//    }
-//  }
+
+  /**
+   * Populates regionMap and serverMap so that regions and servers of the same group are together.
+   *
+   * @param regions        a list of all the regions
+   * @param servers a list of all the servers
+   * @param regionMap      a mapping of group names as a string to the regions it contains
+   * @param serverMap      a mapping of group names as a string to the servers it contains
+   */
+  private void generateGroupMaps(List<HRegionInfo> regions, List<ServerName> servers,
+      ListMultimap<String, HRegionInfo> regionMap, ListMultimap<String, ServerName> serverMap) {
+    try {
+      // put all regions in regionMap
+      for (HRegionInfo region : regions) {
+        GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
+        String groupName = (groupInfo == null)? null : groupInfo.getName();
+        // if a table doesn't belong to a group put it in the default group
+        if (groupName == null) {
+          groupName = groupInfoManager.getDefaultGroupName();
+          groupInfoManager.getGroup(groupName).addTable(region.getTable());
+          LOG.info("The region " + region +
+              " was not put in a group, so it was placed in the default group");
+        }
+        regionMap.put(groupName, region);
+      }
+
+      // put all servers in serverMap
+      for (ServerName serverName : servers) {
+        GroupInfo groupInfo = groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
+        String groupName = (groupInfo == null)? null : groupInfo.getName();
+        // if a table doesn't belong in a group put it in the default group
+        if (groupName == null) {
+          groupName = groupInfoManager.getDefaultGroupName();
+          groupInfoManager.getGroup(groupName).addServer(serverName.getHostAndPort());
+          LOG.info("The server " + serverName +
+              " was not put in a group, so it was placed in the default group");
+        }
+        serverMap.put(groupName, serverName);
+      }
+    } catch (IOException e) {
+      LOG.warn("Failed to generate group maps.", e);
+    }
+  }
 //
 //  private List<HRegionInfo> getMisplacedRegions(Map<HRegionInfo, ServerName> regions)
 //      throws IOException {
