@@ -75,22 +75,22 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   private LoadBalancer internalBalancer;
   private MasterServices masterServices;
 
-//  @Override public void onConfigurationChange(Configuration conf) {
-//    setConf(conf);
-//  }
-//
-//  @Override public Configuration getConf() {
-//    return this.config;
-//  }
-//
-//  @Override public synchronized void setConf(Configuration conf) {
-//    super.setConf(conf);
-//    this.groupInfoManager = new GroupInfoManagerImpl(conf);
-//  }
-//
-//  @Override public void setMasterServices(MasterServices masterServices) {
-//    this.masterServices = masterServices;
-//  }
+  @Override public void onConfigurationChange(Configuration conf) {
+    setConf(conf);
+  }
+
+  @Override public Configuration getConf() {
+    return this.config;
+  }
+
+  @Override public synchronized void setConf(Configuration conf) {
+    super.setConf(conf);
+    this.groupInfoManager = new GroupInfoManagerImpl(conf);
+  }
+
+  @Override public void setMasterServices(MasterServices masterServices) {
+    this.masterServices = masterServices;
+  }
 
   @Override public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterMap) {
 
@@ -169,25 +169,25 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
     return regionsToReturn;
   }
-//
-//  @Override public void initialize() throws HBaseIOException {
-//
-//    LOG.info("**************** initializing group based load balancer *******************");
-//
-//    // TODO: Get internalBalancer class from config
-//    this.internalBalancer = new SimpleLoadBalancer();
-//    this.internalBalancer.setClusterStatus(clusterStatus);
-//    this.internalBalancer.setMasterServices(masterServices);
-//    this.internalBalancer.setConf(config);
-//    this.internalBalancer.initialize();
-//    if (this.groupInfoManager == null) {
-//      try {
-//        this.groupInfoManager = new GroupInfoManagerImpl(this.config);
-//      } catch (Exception e) {
-//        throw new HBaseIOException("Failed to load group info manager.", e);
-//      }
-//    }
-//  }
+
+  @Override public void initialize() throws HBaseIOException {
+
+    LOG.info("**************** initializing group based load balancer *******************");
+
+    // TODO: Get internalBalancer class from config
+    this.internalBalancer = new SimpleLoadBalancer();
+    this.internalBalancer.setClusterStatus(clusterStatus);
+    this.internalBalancer.setMasterServices(masterServices);
+    this.internalBalancer.setConf(config);
+    this.internalBalancer.initialize();
+    if (this.groupInfoManager == null) {
+      try {
+        this.groupInfoManager = new GroupInfoManagerImpl(this.config);
+      } catch (Exception e) {
+        throw new HBaseIOException("Failed to load group info manager.", e);
+      }
+    }
+  }
 //
 //  @Override
 //  public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
