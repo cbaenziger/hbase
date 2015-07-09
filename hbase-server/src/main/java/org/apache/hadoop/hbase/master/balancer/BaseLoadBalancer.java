@@ -836,6 +836,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
 
   @Override
   public void setConf(Configuration conf) {
+
+    LOG.info("***************** setConf");
+
     setSlop(conf);
     if (slop < 0) slop = 0;
     else if (slop > 1) slop = 1;
@@ -935,17 +938,26 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
 
   @Override
   public Configuration getConf() {
+
+    LOG.info("***************** getConf");
+
     return this.config;
   }
 
   @Override
   public void setClusterStatus(ClusterStatus st) {
+
+    LOG.info("***************** setClusterStatus st " + st);
+
     this.clusterStatus = st;
     regionFinder.setClusterStatus(st);
   }
 
   @Override
   public void setMasterServices(MasterServices masterServices) {
+
+    LOG.info("***************** setMasterServices masterServices " + masterServices);
+
     masterServerName = masterServices.getServerName();
     this.services = masterServices;
     this.regionFinder.setServices(masterServices);
@@ -1016,6 +1028,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
   @Override
   public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
       List<ServerName> servers) {
+
+    LOG.info("***************** roundRobinAssignment regions " + regions + " servers " + servers);
+
     metricsBalancer.incrMiscInvocations();
     Map<ServerName, List<HRegionInfo>> assignments = assignMasterRegions(regions, servers);
     if (assignments != null && !assignments.isEmpty()) {
@@ -1134,6 +1149,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
   @Override
   public Map<HRegionInfo, ServerName> immediateAssignment(List<HRegionInfo> regions,
       List<ServerName> servers) {
+
+    LOG.info("***************** immediateAssignment regions " + regions + " servers " + servers);
+
     metricsBalancer.incrMiscInvocations();
     if (servers == null || servers.isEmpty()) {
       LOG.warn("Wanted to do random assignment but no servers to assign to");
@@ -1152,6 +1170,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
    */
   @Override
   public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
+
+    LOG.info("***************** randomAssignment regionInfo " + regionInfo + " servers " + servers);
+
     metricsBalancer.incrMiscInvocations();
     if (servers != null && servers.contains(masterServerName)) {
       if (shouldBeOnMaster(regionInfo)) {
@@ -1196,6 +1217,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
   @Override
   public Map<ServerName, List<HRegionInfo>> retainAssignment(Map<HRegionInfo, ServerName> regions,
       List<ServerName> servers) {
+
+    LOG.info("***************** retainAssignment regions " + regions + " servers " + servers);
+
     // Update metrics
     metricsBalancer.incrMiscInvocations();
     Map<ServerName, List<HRegionInfo>> assignments
@@ -1333,6 +1357,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
    */
   private ServerName randomAssignment(Cluster cluster, HRegionInfo regionInfo,
       List<ServerName> servers) {
+
+    LOG.info("***************** randomAssignment cluster " + cluster + " servers " + servers);
+
     int numServers = servers.size(); // servers is not null, numServers > 1
     ServerName sn = null;
     final int maxIterations = numServers * 4;
@@ -1353,6 +1380,8 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
   private void roundRobinAssignment(Cluster cluster, List<HRegionInfo> regions,
       List<HRegionInfo> unassignedRegions, List<ServerName> servers,
       Map<ServerName, List<HRegionInfo>> assignments) {
+
+    LOG.info("***************** roundRobinAssignment cluster " + cluster  + " regions " + regions + " servers " + servers + " assignments " + assignments);
 
     int numServers = servers.size();
     int numRegions = regions.size();

@@ -43,12 +43,16 @@
   </property>
   <property>
     <name>hbase.regionserver.port</name>
-    <value>60040</value>
+    <value>60100</value>
   </property>
   <property>
     <name>hbase.regionserver.info.port</name>
-    <value>60050</value>
+    <value>60030</value>
   </property>
+	<property>
+		<name>dfs.replication</name>
+		<value>1</value>
+	</property>
 	<property>
 		<name>hbase.master.loadbalancer.class</name>
 		<value>org.apache.hadoop.hbase.master.balancer.grouploadbalancer.GroupBasedLoadBalancer</value>

@@ -172,7 +172,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
   @Override public void initialize() throws HBaseIOException {
 
-    LOG.info("**************** initializing group based load balancer *******************");
+    LOG.info("***************** initialize");
 
     // TODO: Get internalBalancer class from config
     this.internalBalancer = new SimpleLoadBalancer();
@@ -192,8 +192,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   @Override
   public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
 
-    LOG.info("**************** group based load balancer randomAssignment *******************");
-    LOG.info("regionInfo " + regionInfo + " servers " + servers);
+    LOG.info("***************** randomAssignment regionInfo " + regionInfo + " servers " + servers);
 
     if (servers != null && servers.contains(masterServerName)) {
       if (shouldBeOnMaster(regionInfo)) {
@@ -216,7 +215,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
       ServerName serverToReturn =
           this.internalBalancer.randomAssignment(regionInfo, filteredServers);
-      LOG.info("randomAssignment regionInfo " + regionInfo + " being put on server " + serverToReturn);
+      LOG.info("***************** randomAssignment regionInfo " + regionInfo + " being put on server " + serverToReturn);
       return serverToReturn;
 
       //      return this.internalBalancer.randomAssignment(regionInfo, filteredServers);
@@ -226,34 +225,34 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
     return null;
   }
 
-  @Override
-  public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
-      List<ServerName> servers) {
-
-    LOG.info("**************** group based load balancer roundRobinAssignment *******************");
-    LOG.info("regions " + regions + " servers " + servers);
-
-    Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
-    ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
-    ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
-
-    try {
-      generateGroupMaps(regions, servers, regionMap, serverMap);
-      for (String groupName : regionMap.keySet()) {
-        if (regionMap.get(groupName).size() > 0) {
-          Map<ServerName, List<HRegionInfo>> result = this.internalBalancer
-              .roundRobinAssignment(regionMap.get(groupName), serverMap.get(groupName));
-          if (result != null) {
-            assignments.putAll(result);
-          }
-        }
-      }
-    } catch (HBaseIOException e) {
-      LOG.warn("Error with round robin assignments.", e);
-    }
-    LOG.info("roundRobinAssignment returns " + assignments);
-    return assignments;
-  }
+//  @Override
+//  public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
+//      List<ServerName> servers) {
+//
+//    LOG.info("**************** group based load balancer roundRobinAssignment *******************");
+//    LOG.info("regions " + regions + " servers " + servers);
+//
+//    Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
+//    ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+//    ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+//
+//    try {
+//      generateGroupMaps(regions, servers, regionMap, serverMap);
+//      for (String groupName : regionMap.keySet()) {
+//        if (regionMap.get(groupName).size() > 0) {
+//          Map<ServerName, List<HRegionInfo>> result = this.internalBalancer
+//              .roundRobinAssignment(regionMap.get(groupName), serverMap.get(groupName));
+//          if (result != null) {
+//            assignments.putAll(result);
+//          }
+//        }
+//      }
+//    } catch (HBaseIOException e) {
+//      LOG.warn("Error with round robin assignments.", e);
+//    }
+//    LOG.info("roundRobinAssignment returns " + assignments);
+//    return assignments;
+//  }
 //
 //  @Override
 //  public Map<ServerName, List<HRegionInfo>> retainAssignment(Map<HRegionInfo, ServerName> regions,

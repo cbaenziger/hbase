@@ -50,6 +50,10 @@
 			<value>60031</value>
 	</property>
 	<property>
+		<name>dfs.replication</name>
+		<value>1</value>
+	</property>
+	<property>
 		<name>hbase.master.loadbalancer.class</name>
 		<value>org.apache.hadoop.hbase.master.balancer.grouploadbalancer</value>
 	</property>

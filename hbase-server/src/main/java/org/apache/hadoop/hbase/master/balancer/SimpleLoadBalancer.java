@@ -183,8 +183,7 @@ public class SimpleLoadBalancer extends BaseLoadBalancer {
   public List<RegionPlan> balanceCluster(
       Map<ServerName, List<HRegionInfo>> clusterMap) {
 
-    LOG.info("********************** using simple load balancer");
-    System.exit(0);
+    LOG.info("***************** balanceCluster " + " clusterMap " + clusterMap);
 
     List<RegionPlan> regionsToReturn = balanceMasterRegions(clusterMap);
     if (regionsToReturn != null || clusterMap == null || clusterMap.size() <= 1) {
