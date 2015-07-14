@@ -1037,6 +1037,9 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
       servers = new ArrayList<ServerName>(servers);
       // Guarantee not to put other regions on master
       servers.remove(masterServerName);
+
+      LOG.info("***************** masterServerName " + masterServerName);
+
       List<HRegionInfo> masterRegions = assignments.get(masterServerName);
       if (!masterRegions.isEmpty()) {
         regions = new ArrayList<HRegionInfo>(regions);
@@ -1172,6 +1175,7 @@ public abstract class BaseLoadBalancer implements LoadBalancer {
   public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
 
     LOG.info("***************** randomAssignment regionInfo " + regionInfo + " servers " + servers);
+    LOG.info("***************** masterServerName " + masterServerName);
 
     metricsBalancer.incrMiscInvocations();
     if (servers != null && servers.contains(masterServerName)) {
