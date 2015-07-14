@@ -16,8 +16,14 @@
 package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
 import java.io.IOException;
-import java.security.acl.Group;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.TreeMap;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.LinkedListMultimap;
@@ -209,7 +215,6 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
       LOG.info("***************** randomAssignment regionInfo " + regionInfo + " being put on server " + serverToReturn);
       return serverToReturn;
 
-      //      return this.internalBalancer.randomAssignment(regionInfo, filteredServers);
     } catch(Exception e) {
       LOG.warn("Failed to do random assignment.", e);
     }
@@ -297,7 +302,7 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
           }
         }
       }
-      
+
       LOG.info("**************** retainAssignment assignments " + assignments);
       return assignments;
     } catch (Exception e) {

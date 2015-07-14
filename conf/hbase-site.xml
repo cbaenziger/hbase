@@ -80,10 +80,6 @@
 	</property>
 	<property>
 		<name>hbase.master.balancer.grouploadbalancer.tablegroups.group2</name>
-		<value>my_ns:namespace_table;test</value>
-	</property>
-	<property>
-		<name>hbase.master.startup.retainassign</name>
-		<value>true</value>
+		<value>test_ns:test;test2</value>
 	</property>
 </configuration>
