@@ -94,84 +94,91 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 
   @Override public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterMap) {
 
-    LOG.info("***************** balanceCluster ");
+    LOG.info("***************** balanceCluster clusterMap " + clusterMap);
 
-    return null;
+    // don't balance master
+    if (masterServerName != null && clusterMap.containsKey(masterServerName)) {
+      clusterMap = new HashMap<>(clusterMap);
+      clusterMap.remove(masterServerName);
+    }
 
-//    // don't balance master
-//    if (masterServerName != null && clusterMap.containsKey(masterServerName)) {
-//      clusterMap = new HashMap<>(clusterMap);
-//      clusterMap.remove(masterServerName);
-//    }
-//
-//    // see if master regions need to be balanced
-//    List<RegionPlan> regionsToReturn = balanceMasterRegions(clusterMap);
-//    if (regionsToReturn != null) {
-//      return regionsToReturn;
-//    }
-//
-//    // we need to add all the servers and tables that were not placed in the default group
-//    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMap.entrySet()) {
-//      ServerName serverName = entry.getKey();
-//      List<HRegionInfo> regions = entry.getValue();
-//
-//      String defaultGroupName = this.groupInfoManager.getDefaultGroupName();
-//
-//      try {
-//        if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort()) == null) {
-//          this.groupInfoManager.getGroup(defaultGroupName).addServer(serverName.getHostAndPort());
-//        }
-//      } catch (Exception e) {
-//        LOG.debug("Error putting server " + serverName.getHostAndPort() + " in the default group.");
-//      }
-//
-//      for (HRegionInfo region : regions) {
-//        try {
-//          if (this.groupInfoManager.getGroupOfTable(region.getTable()) == null) {
-//            this.groupInfoManager.getGroup(defaultGroupName).addTable(region.getTable());
-//          }
-//        } catch (Exception e) {
-//          LOG.debug("Error putting region " + region + " in the default group.");
-//        }
-//      }
-//    }
-//
-//    Map<ServerName, List<HRegionInfo>> correctedClusterMap = correctAssignments(clusterMap);
-//    regionsToReturn = new ArrayList<>();
-//
-//    // Balance regions group by group
-//    try {
-//      for (GroupInfo currentGroupInfo : this.groupInfoManager.listGroups()) {
-//        Map<ServerName, List<HRegionInfo>> groupClusterMap = new HashMap<>();
-//        for (Map.Entry<ServerName, List<HRegionInfo>> entry : correctedClusterMap.entrySet()) {
-//          ServerName serverName = entry.getKey();
-//          List<HRegionInfo> regions = entry.getValue();
-//          if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort())
-//              == currentGroupInfo) {
-//            groupClusterMap.put(serverName, new LinkedList<HRegionInfo>());
-//          }
-//
-//          for (HRegionInfo region : regions) {
-//            if (this.groupInfoManager.getGroupOfTable(region.getTable()) == currentGroupInfo) {
-//              groupClusterMap.get(serverName).add(region);
-//            }
-//          }
-//        }
-//
-//        List<RegionPlan> groupRegionsToReturn =
-//            this.internalBalancer.balanceCluster(groupClusterMap);
-//        if (groupRegionsToReturn != null) {
-//          regionsToReturn.addAll(groupRegionsToReturn);
-//        }
-//      }
-//    } catch (Exception e) {
-//      LOG.warn("Exception while balancing cluster.", e);
-//      regionsToReturn.clear();
-//    }
-//
-//    LOG.info("***************** regionsToReturn " + regionsToReturn);
-//
-//    return regionsToReturn;
+    // see if master regions need to be balanced
+    List<RegionPlan> regionsToReturn = balanceMasterRegions(clusterMap);
+    if (regionsToReturn != null) {
+      return regionsToReturn;
+    }
+
+    // we need to add all the servers and tables that were not placed in the default group
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMap.entrySet()) {
+      ServerName serverName = entry.getKey();
+      List<HRegionInfo> regions = entry.getValue();
+
+      String defaultGroupName = this.groupInfoManager.getDefaultGroupName();
+
+      try {
+        if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort()) == null) {
+          this.groupInfoManager.getGroup(defaultGroupName).addServer(serverName.getHostAndPort());
+        }
+      } catch (Exception e) {
+        LOG.debug("Error putting server " + serverName.getHostAndPort() + " in the default group.");
+      }
+
+      for (HRegionInfo region : regions) {
+        try {
+          if (this.groupInfoManager.getGroupOfTable(region.getTable()) == null) {
+            this.groupInfoManager.getGroup(defaultGroupName).addTable(region.getTable());
+          }
+        } catch (Exception e) {
+          LOG.debug("Error putting region " + region + " in the default group.");
+        }
+      }
+    }
+
+    Map<ServerName, List<HRegionInfo>> correctedClusterMap = correctAssignments(clusterMap);
+    regionsToReturn = new ArrayList<>();
+
+    try {
+      LOG.info("***************** this.groupInfoManager.listGroups()) " + this.groupInfoManager.listGroups());
+    } catch (Exception e) {
+
+    }
+    LOG.info("***************** correctedClusterMap " + correctedClusterMap);
+
+    // Balance regions group by group
+    try {
+      for (GroupInfo currentGroupInfo : this.groupInfoManager.listGroups()) {
+        Map<ServerName, List<HRegionInfo>> groupClusterMap = new HashMap<>();
+        for (Map.Entry<ServerName, List<HRegionInfo>> entry : correctedClusterMap.entrySet()) {
+          ServerName serverName = entry.getKey();
+          List<HRegionInfo> regions = entry.getValue();
+          if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort())
+              == currentGroupInfo) {
+            groupClusterMap.put(serverName, new LinkedList<HRegionInfo>());
+          }
+
+          for (HRegionInfo region : regions) {
+            if (this.groupInfoManager.getGroupOfTable(region.getTable()) == currentGroupInfo) {
+              groupClusterMap.get(serverName).add(region);
+            }
+          }
+        }
+
+        LOG.info("***************** groupClusterMap " + groupClusterMap);
+
+        List<RegionPlan> groupRegionsToReturn =
+            this.internalBalancer.balanceCluster(groupClusterMap);
+        if (groupRegionsToReturn != null) {
+          regionsToReturn.addAll(groupRegionsToReturn);
+        }
+      }
+    } catch (Exception e) {
+      LOG.warn("Exception while balancing cluster.", e);
+      regionsToReturn.clear();
+    }
+
+    LOG.info("***************** regionsToReturn " + regionsToReturn);
+
+    return regionsToReturn;
   }
 
   @Override public void initialize() throws HBaseIOException {
@@ -334,7 +341,6 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
     }
     return null;
   }
-
 
   /**
    * If a region is assigned to a server in the wrong group, unassign it so it is assigned to a
