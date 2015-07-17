@@ -56,7 +56,14 @@
 	<property>
 		<name>hbase.master.loadbalancer.class</name>
 		<value>org.apache.hadoop.hbase.master.balancer.grouploadbalancer.GroupBasedLoadBalancer</value>
-		<!-- <value>org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer</value> -->
+	</property>
+	<property>
+		<name>hbase.master.loadbalancer.class</name>
+		<value>org.apache.hadoop.hbase.master.balancer.grouploadbalancer.GroupBasedLoadBalancer</value>
+	</property>
+	<property>
+		<name>hbase.master.balancer.grouploadbalancer.internalbalancerclass</name>
+		<value>org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer</value>
 	</property>
 	<property>
 		<name>hbase.master.balancer.grouploadbalancer.groups</name>

@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.master.MasterServices;
 import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.master.balancer.BaseLoadBalancer;
 import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
+import org.apache.hadoop.hbase.util.ReflectionUtils;
 
 /**
  * This load balancer partitions servers and tables into groups. Then, within each group, it uses
@@ -187,13 +188,6 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
   @Override public void initialize() throws HBaseIOException {
 
     LOG.info("***************** initialize");
-
-    // TODO: Get internalBalancer class from config
-    this.internalBalancer = new SimpleLoadBalancer();
-    this.internalBalancer.setClusterStatus(clusterStatus);
-    this.internalBalancer.setMasterServices(masterServices);
-    this.internalBalancer.setConf(config);
-    this.internalBalancer.initialize();
     if (this.groupInfoManager == null) {
       try {
         this.groupInfoManager = new GroupInfoManagerImpl(this.config);
@@ -201,6 +195,14 @@ import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
         throw new HBaseIOException("Failed to load group info manager.", e);
       }
     }
+    String internalBalancerClassName = this.groupInfoManager.getDefaultBalancerClassName();
+    Class<? extends LoadBalancer> balancerClass =
+        config.getClass(internalBalancerClassName, SimpleLoadBalancer.class, LoadBalancer.class);
+    this.internalBalancer = ReflectionUtils.newInstance(balancerClass);
+    this.internalBalancer.setClusterStatus(clusterStatus);
+    this.internalBalancer.setMasterServices(masterServices);
+    this.internalBalancer.setConf(config);
+    this.internalBalancer.initialize();
   }
 
   @Override

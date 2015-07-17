@@ -48,12 +48,15 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
       "hbase.master.balancer.grouploadbalancer.servergroups.";
   private static final String TABLE_GROUPS_PREFIX =
       "hbase.master.balancer.grouploadbalancer.tablegroups.";
+  private static final String INTERNAL_BALANCER_CLASS =
+      "hbase.master.balancer.grouploadbalancer.internalbalancerclass";
 
   private static final String GROUP_DELIMITER = ";";
 
   // Access to this map should always be synchronized.
   private volatile Map<String, GroupInfo> groupMap;
   private String defaultGroupName;
+  private String defaultBalancerClassName;
 
   public GroupInfoManagerImpl(Configuration conf) {
     this.groupMap = new HashMap<>();
@@ -186,8 +189,20 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
     return sb.toString();
   }
 
+  /**
+   *
+   * @return the default group name
+   */
   public String getDefaultGroupName() {
     return this.defaultGroupName;
+  }
+
+  /**
+   *
+   * @return the default internal balancer name
+   */
+  public String getDefaultBalancerClassName() {
+    return this.defaultBalancerClassName;
   }
 
   /**
@@ -244,6 +259,10 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
     }
     if (!this.groupMap.containsKey(this.defaultGroupName)) {
       throw new IllegalArgumentException("Default group name must be a pre-existing group name.");
+    }
+    this.defaultBalancerClassName = config.get(INTERNAL_BALANCER_CLASS);
+    if (this.defaultBalancerClassName == null) {
+      LOG.warn("Internal balancer class name was not defined so the default is being used.");
     }
   }
 
