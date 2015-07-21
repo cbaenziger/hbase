@@ -151,6 +151,9 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
     // Balance regions group by group
     try {
       for (GroupInfo currentGroupInfo : this.groupInfoManager.listGroups()) {
+
+        LOG.info("***************** currentGroupInfo " + currentGroupInfo);
+
         Map<ServerName, List<HRegionInfo>> groupClusterMap = new HashMap<>();
         for (Map.Entry<ServerName, List<HRegionInfo>> entry : correctedClusterMap.entrySet()) {
           ServerName serverName = entry.getKey();
