@@ -20,6 +20,7 @@
 
 package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
 import org.apache.commons.logging.Log;
@@ -41,6 +42,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.TreeMap;
 
 /**
@@ -179,6 +181,76 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
     return assignments;
   }
 
+  @Override
+  public Map<ServerName, List<HRegionInfo>> retainAssignment(Map<HRegionInfo, ServerName> regions,
+      List<ServerName> servers) {
+    try {
+      Map<ServerName, List<HRegionInfo>> assignments = new TreeMap<>();
+      ListMultimap<String, HRegionInfo> groupToRegion = ArrayListMultimap.create();
+      List<HRegionInfo> misplacedRegions = getMisplacedRegions(regions);
+      for (HRegionInfo region : regions.keySet()) {
+        if (!misplacedRegions.contains(region)) {
+          String groupName = groupInfoManager.getGroupOfTable(region.getTable()).getName();
+          groupToRegion.put(groupName, region);
+        }
+      }
+
+      // Now the "groupToRegion" map has only the regions which have correct assignments
+      for (String groupName : groupToRegion.keySet()) {
+        Map<HRegionInfo, ServerName> currentAssignmentMap = new TreeMap<>();
+        List<HRegionInfo> regionList = groupToRegion.get(groupName);
+        for (HRegionInfo region : regionList) {
+          currentAssignmentMap.put(region, regions.get(region));
+        }
+        GroupInfo groupInfo = groupInfoManager.getGroupInfo(groupName);
+        List<ServerName> candidateList = filterServersForGroupInfo(groupInfo, servers);
+        Map<ServerName, List<HRegionInfo>> assignmentsFromInternalBalancer =
+            this.internalBalancer.retainAssignment(currentAssignmentMap, candidateList);
+        for (Map.Entry<ServerName, List<HRegionInfo>> entry :
+            assignmentsFromInternalBalancer.entrySet()) {
+          ServerName serverName = entry.getKey();
+          List<HRegionInfo> regionListFromInternalBalancer = entry.getValue();
+          if (!assignments.containsKey(serverName)) {
+            assignments.put(serverName, regionListFromInternalBalancer);
+          } else {
+            List<HRegionInfo> existingRegionList = assignments.get(serverName);
+            existingRegionList.addAll(regionListFromInternalBalancer);
+            assignments.put(serverName, existingRegionList);
+          }
+        }
+      }
+
+      for (HRegionInfo region : misplacedRegions) {
+        GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
+        List<ServerName> candidateList = filterServersForGroupInfo(groupInfo, servers);
+        ServerName serverName = this.internalBalancer.randomAssignment(region, candidateList);
+        if (serverName != null && !assignments.containsKey(serverName)) {
+          assignments.put(serverName, new ArrayList<HRegionInfo>());
+        } else if (serverName != null) {
+          assignments.get(serverName).add(region);
+        } else {
+          // if no server is available to assign, assign it to a server in the default group
+          NavigableSet<String> defaultServersString =
+              groupInfoManager.getGroupInfo(groupInfoManager.getDefaultGroupName()).getServers();
+          List<ServerName> serverNameList = new ArrayList<>();
+          while (defaultServersString.iterator().hasNext()) {
+            serverNameList.add(ServerName.parseServerName(defaultServersString.iterator().next()));
+          }
+          ServerName randomServerFromDefaultGroup =
+              this.internalBalancer.randomAssignment(region, serverNameList);
+          if (!assignments.containsKey(randomServerFromDefaultGroup)) {
+            assignments.put(randomServerFromDefaultGroup, new ArrayList<HRegionInfo>());
+          }
+        }
+      }
+      return assignments;
+    } catch (Exception exp) {
+      LOG.warn("Failed to do retain assignment.", exp);
+    }
+    return null;
+  }
+
+
   /**
    * Populates regionMap and serverMap so that regions and servers of the same group are together.
    *
@@ -218,6 +290,29 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
     }
   }
 
+  private List<HRegionInfo> getMisplacedRegions(Map<HRegionInfo, ServerName> regions)
+      throws IOException {
+    List<HRegionInfo> misplacedRegions = new ArrayList<>();
+    for (HRegionInfo region : regions.keySet()) {
+      ServerName assignedServer = regions.get(region);
+      GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
+      if (groupInfo == null) {
+        String defaultGroupName = groupInfoManager.getDefaultGroupName();
+        GroupInfo defaultGroupInfo = groupInfoManager.getGroupInfo(defaultGroupName);
+        defaultGroupInfo.addTable(region.getTable());
+        groupInfo = defaultGroupInfo;
+      }
+      if (!groupInfo.containsServer(assignedServer.getHostAndPort())) {
+        LOG.warn("Found misplaced region: " + region.getRegionNameAsString() + " on server: "
+            + assignedServer + " found in group: " + groupInfoManager
+            .getGroupOfServer(assignedServer.getHostAndPort()) + " outside of group " +
+            groupInfo.getName());
+        misplacedRegions.add(region);
+      }
+    }
+    return misplacedRegions;
+  }
+
   /**
    * If a region is assigned to a server in the wrong group, unassign it so it is assigned to a
    * a server in he right one.
@@ -255,5 +350,20 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
       }
     }
     return correctAssignments;
+  }
+
+  private List<ServerName> filterServersForGroupInfo(GroupInfo groupInfo,
+      List<ServerName> servers) {
+    List<ServerName> serversForGroupInfo = new ArrayList<>();
+    for (ServerName serverName : servers) {
+      try {
+        if (groupInfoManager.getGroupOfServer(serverName.getHostAndPort()) == groupInfo) {
+          serversForGroupInfo.add(serverName);
+        }
+      } catch (IOException exp) {
+        LOG.warn("Could not get group for server: " + serverName);
+      }
+    }
+    return serversForGroupInfo;
   }
 }
