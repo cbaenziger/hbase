@@ -22,6 +22,7 @@ package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseInterfaceAudience;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.ServerName;
@@ -51,6 +52,28 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
   private MasterServices masterServices;
   private GroupInfoManagerImpl groupInfoManager;
   private LoadBalancer internalBalancer;
+
+  @Override
+  public Configuration getConf() {
+    return this.config;
+  }
+
+  @Override
+  public synchronized void setConf(Configuration conf) {
+    super.setConf(conf);
+    this.groupInfoManager = new GroupInfoManagerImpl(conf);
+  }
+
+  @Override
+  public void onConfigurationChange(Configuration conf) {
+    super.onConfigurationChange(conf);
+    setConf(conf);
+  }
+
+  @Override
+  public void setMasterServices(MasterServices masterServices) {
+    this.masterServices = masterServices;
+  }
 
   @Override
   public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterState) {
