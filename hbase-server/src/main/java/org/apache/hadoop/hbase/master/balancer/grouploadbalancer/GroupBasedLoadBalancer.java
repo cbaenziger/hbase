@@ -250,6 +250,26 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
     return null;
   }
 
+  @Override
+  public Map<HRegionInfo, ServerName> immediateAssignment(List<HRegionInfo> regions,
+      List<ServerName> servers) {
+    try {
+      Map<HRegionInfo, ServerName> assignments = new HashMap<>();
+      ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+      ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+      generateGroupMaps(regions, servers, regionMap, serverMap);
+      for (String groupName : regionMap.keySet()) {
+        if (regionMap.get(groupName).size() > 0) {
+          assignments.putAll(this.internalBalancer
+              .immediateAssignment(regionMap.get(groupName), serverMap.get(groupName)));
+        }
+      }
+      return assignments;
+    } catch (Exception exp) {
+      LOG.warn("Failed to do immediate assignment.", exp);
+    }
+    return null;
+  }
 
   /**
    * Populates regionMap and serverMap so that regions and servers of the same group are together.
