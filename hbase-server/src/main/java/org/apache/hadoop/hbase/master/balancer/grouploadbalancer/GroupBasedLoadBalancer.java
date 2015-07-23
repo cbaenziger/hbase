@@ -23,6 +23,7 @@ package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -267,6 +268,20 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
       return assignments;
     } catch (Exception exp) {
       LOG.warn("Failed to do immediate assignment.", exp);
+    }
+    return null;
+  }
+
+  @Override
+  public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
+    try {
+      ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+      ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+      generateGroupMaps(Lists.newArrayList(regionInfo), servers, regionMap, serverMap);
+      List<ServerName> filteredServers = serverMap.get(regionMap.keySet().iterator().next());
+      return this.internalBalancer.randomAssignment(regionInfo, filteredServers);
+    } catch(Exception e) {
+      LOG.warn("Failed to do random assignment.", e);
     }
     return null;
   }
