@@ -1,4 +1,6 @@
 /**
+ * Copyright The Apache Software Foundation
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -6,24 +8,17 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeMap;
+package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.LinkedListMultimap;
@@ -44,76 +39,69 @@ import org.apache.hadoop.hbase.master.balancer.BaseLoadBalancer;
 import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
 import org.apache.hadoop.hbase.util.ReflectionUtils;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.TreeMap;
+
+
 /**
  * This load balancer partitions servers and tables into groups. Then, within each group, it uses
  * another load balancer to balance within each group.
- * The configuration for the groups is set within the hbase-site.xml file. Within hbase-site.xml:
- * "hbase.master.loadbalancer.class" needs to be set to
- * "org.apache.hadoop.hbase.master.balancer.grouploadbalancer.GroupLoadBalancer" for this load
- * balancer to work.
- * "hbase.master.balancer.grouploadbalancer.groups" configures the names of the groups, separated
- * with a ";" eg. "group1;group2" creates two groups, named group1 and group2.
- * "hbase.master.balancer.grouploadbalancer.defaultgroup" configures the name of the default group.
- * Note that the defaultgroup must be a pre-existing group defined in
- * "hbase.master.balancer.grouploadbalancer.groups". eg. "group1" sets group1 to be the default
- * group.
- * To put servers in groups, you need to create a property named
- * "hbase.master.balancer.grouploadbalancer.servergroups." + groupName, and set it's value to the
- * IP address and port of the server in a comma separated list.
- * Note that the IP address and the port over the server is separated by a ",", not a ":".
- * eg. "hbase.master.balancer.grouploadbalancer.servergroups.group1" with a value
- * "10.255.196.145,60020;10.255.196.145,60021" will put two servers in group1.
- * To put tables in groups, you need to create a property named
- * "hbase.master.balancer.grouploadbalancer.tablegroups." + groupName, and set it's value to the
- * name of the table in a comma separated list. You must specify it's namespace in here also.
- * eg. "hbase.master.balancer.grouploadbalancer.tablegroups.group1" with a value
- * "my_ns:namespace_table;test" will put two servers in group1. Note that "namespace_table" is under
- * the namespace "my_ns".
  */
-@InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG) public class GroupBasedLoadBalancer
-    extends BaseLoadBalancer {
+@InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG)
+public class GroupBasedLoadBalancer extends BaseLoadBalancer {
 
   private static final Log LOG = LogFactory.getLog(GroupBasedLoadBalancer.class);
 
+  private MasterServices masterServices;
   private GroupInfoManagerImpl groupInfoManager;
   private LoadBalancer internalBalancer;
-  private MasterServices masterServices;
 
-  @Override public void onConfigurationChange(Configuration conf) {
-    setConf(conf);
-  }
-
-  @Override public Configuration getConf() {
+  @Override
+  public Configuration getConf() {
     return this.config;
   }
 
-  @Override public synchronized void setConf(Configuration conf) {
+  @Override
+  public synchronized void setConf(Configuration conf) {
     super.setConf(conf);
     this.groupInfoManager = new GroupInfoManagerImpl(conf);
   }
 
-  @Override public void setMasterServices(MasterServices masterServices) {
+  @Override
+  public void onConfigurationChange(Configuration conf) {
+    super.onConfigurationChange(conf);
+    setConf(conf);
+  }
+
+  @Override
+  public void setMasterServices(MasterServices masterServices) {
     this.masterServices = masterServices;
   }
 
-  @Override public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterMap) {
-
-    LOG.info("***************** balanceCluster clusterMap " + clusterMap);
+  @Override
+  public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterState) {
 
     // don't balance master
-    if (masterServerName != null && clusterMap.containsKey(masterServerName)) {
-      clusterMap = new HashMap<>(clusterMap);
-      clusterMap.remove(masterServerName);
+    if (masterServerName != null && clusterState.containsKey(masterServerName)) {
+      clusterState = new HashMap<>(clusterState);
+      clusterState.remove(masterServerName);
     }
 
     // see if master regions need to be balanced
-    List<RegionPlan> regionsToReturn = balanceMasterRegions(clusterMap);
-    if (regionsToReturn != null) {
-      return regionsToReturn;
+    List<RegionPlan> regionPlans = balanceMasterRegions(clusterState);
+    if (regionPlans != null) {
+      return regionPlans;
     }
 
     // we need to add all the servers and tables that were not placed in the default group
-    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterMap.entrySet()) {
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterState.entrySet()) {
       ServerName serverName = entry.getKey();
       List<HRegionInfo> regions = entry.getValue();
 
@@ -123,7 +111,7 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
         if (this.groupInfoManager.getGroupOfServer(serverName.getHostAndPort()) == null) {
           this.groupInfoManager.getGroup(defaultGroupName).addServer(serverName.getHostAndPort());
         }
-      } catch (Exception e) {
+      } catch (Exception exp) {
         LOG.debug("Error putting server " + serverName.getHostAndPort() + " in the default group.");
       }
 
@@ -132,28 +120,18 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
           if (this.groupInfoManager.getGroupOfTable(region.getTable()) == null) {
             this.groupInfoManager.getGroup(defaultGroupName).addTable(region.getTable());
           }
-        } catch (Exception e) {
+        } catch (Exception exp) {
           LOG.debug("Error putting region " + region + " in the default group.");
         }
       }
     }
 
-    Map<ServerName, List<HRegionInfo>> correctedClusterMap = correctAssignments(clusterMap);
-    regionsToReturn = new ArrayList<>();
-
-    try {
-      LOG.info("***************** this.groupInfoManager.listGroups()) " + this.groupInfoManager.listGroups());
-    } catch (Exception e) {
-
-    }
-    LOG.info("***************** correctedClusterMap " + correctedClusterMap);
+    Map<ServerName, List<HRegionInfo>> correctedClusterMap = correctAssignments(clusterState);
+    regionPlans = new ArrayList<>();
 
     // Balance regions group by group
     try {
       for (GroupInfo currentGroupInfo : this.groupInfoManager.listGroups()) {
-
-        LOG.info("***************** currentGroupInfo " + currentGroupInfo);
-
         Map<ServerName, List<HRegionInfo>> groupClusterMap = new HashMap<>();
         for (Map.Entry<ServerName, List<HRegionInfo>> entry : correctedClusterMap.entrySet()) {
           ServerName serverName = entry.getKey();
@@ -170,82 +148,25 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
           }
         }
 
-        LOG.info("***************** groupClusterMap " + groupClusterMap);
-
         List<RegionPlan> groupRegionsToReturn =
             this.internalBalancer.balanceCluster(groupClusterMap);
         if (groupRegionsToReturn != null) {
-          regionsToReturn.addAll(groupRegionsToReturn);
+          regionPlans.addAll(groupRegionsToReturn);
         }
       }
-    } catch (Exception e) {
-      LOG.warn("Exception while balancing cluster.", e);
-      regionsToReturn.clear();
+    } catch (IOException exp) {
+      LOG.warn("Exception while balancing cluster.", exp);
+      regionPlans.clear();
     }
-
-    LOG.info("***************** regionsToReturn " + regionsToReturn);
-
-    return regionsToReturn;
-  }
-
-  @Override public void initialize() throws HBaseIOException {
-
-    LOG.info("***************** initialize");
-    if (this.groupInfoManager == null) {
-      try {
-        this.groupInfoManager = new GroupInfoManagerImpl(this.config);
-      } catch (Exception e) {
-        throw new HBaseIOException("Failed to load group info manager.", e);
-      }
-    }
-    String internalBalancerClassName = this.groupInfoManager.getDefaultBalancerClassName();
-    Class<? extends LoadBalancer> balancerClass =
-        config.getClass(internalBalancerClassName, SimpleLoadBalancer.class, LoadBalancer.class);
-    this.internalBalancer = ReflectionUtils.newInstance(balancerClass);
-    this.internalBalancer.setClusterStatus(clusterStatus);
-    this.internalBalancer.setMasterServices(masterServices);
-    this.internalBalancer.setConf(config);
-    this.internalBalancer.initialize();
-  }
-
-  @Override
-  public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
-
-    LOG.info("***************** randomAssignment regionInfo " + regionInfo + " servers " + servers);
-    LOG.info("***************** masterServerName " + masterServerName);
-
-    try {
-      ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
-      ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
-
-      generateGroupMaps(Lists.newArrayList(regionInfo), servers, regionMap, serverMap);
-
-      LOG.info("regionMap " + regionMap);
-      LOG.info("serverMap " + serverMap);
-
-      List<ServerName> filteredServers = serverMap.get(regionMap.keySet().iterator().next());
-
-      ServerName serverToReturn =
-          this.internalBalancer.randomAssignment(regionInfo, filteredServers);
-      LOG.info("***************** randomAssignment regionInfo " + regionInfo + " being put on server " + serverToReturn);
-      return serverToReturn;
-
-    } catch(Exception e) {
-      LOG.warn("Failed to do random assignment.", e);
-    }
-    return null;
+    return regionPlans;
   }
 
   @Override
   public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
       List<ServerName> servers) {
-
-    LOG.info("***************** roundRobinAssignment regions " + regions + " servers " + servers);
-
     Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
     ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
     ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
-
     try {
       generateGroupMaps(regions, servers, regionMap, serverMap);
       for (String groupName : regionMap.keySet()) {
@@ -257,20 +178,15 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
           }
         }
       }
-    } catch (HBaseIOException e) {
-      LOG.warn("Error with round robin assignments.", e);
+    } catch (HBaseIOException exp) {
+      LOG.warn("Error with round robin assignments.", exp);
     }
-    LOG.info("***************** roundRobinAssignment assignments " + assignments);
-
     return assignments;
   }
 
   @Override
   public Map<ServerName, List<HRegionInfo>> retainAssignment(Map<HRegionInfo, ServerName> regions,
       List<ServerName> servers) {
-
-    LOG.info("**************** retainAssignment regions " + regions + " servers " + servers);
-
     try {
       Map<ServerName, List<HRegionInfo>> assignments = new TreeMap<>();
       ListMultimap<String, HRegionInfo> groupToRegion = ArrayListMultimap.create();
@@ -317,84 +233,47 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
           }
         }
       }
-
-      LOG.info("**************** retainAssignment assignments " + assignments);
       return assignments;
-    } catch (Exception e) {
-      LOG.warn("Failed to do retain assignment.", e);
+    } catch (Exception exp) {
+      LOG.warn("Failed to do retain assignment.", exp);
     }
-
     return null;
   }
 
-  @Override public Map<HRegionInfo, ServerName> immediateAssignment(List<HRegionInfo> regions,
+  @Override
+  public Map<HRegionInfo, ServerName> immediateAssignment(List<HRegionInfo> regions,
       List<ServerName> servers) {
-
-    LOG.info("**************** group based load balancer immediateAssignment *******************");
-
     try {
       Map<HRegionInfo, ServerName> assignments = new HashMap<>();
       ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
       ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
       generateGroupMaps(regions, servers, regionMap, serverMap);
-
       for (String groupName : regionMap.keySet()) {
         if (regionMap.get(groupName).size() > 0) {
           assignments.putAll(this.internalBalancer
               .immediateAssignment(regionMap.get(groupName), serverMap.get(groupName)));
         }
       }
-    } catch (Exception e) {
-      LOG.warn("Failed to do immediate assignment.", e);
+    } catch (Exception exp) {
+      LOG.warn("Failed to do immediate assignment.", exp);
     }
     return null;
   }
 
-  /**
-   * If a region is assigned to a server in the wrong group, unassign it so it is assigned to a
-   * a server in he right one.
-   *
-   * @param existingAssignments a map of servers and the regions that it holds
-   * @return a map of servers and regions within it that belongs to the same group
-   */
-  private Map<ServerName, List<HRegionInfo>> correctAssignments(
-      Map<ServerName, List<HRegionInfo>> existingAssignments) {
-
-    Map<ServerName, List<HRegionInfo>> correctAssignments = new TreeMap<>();
-
-    for (Map.Entry<ServerName, List<HRegionInfo>> entry : existingAssignments.entrySet()) {
-
-      ServerName serverName = entry.getKey();
-      List<HRegionInfo> regions = entry.getValue();
-
-      correctAssignments.put(serverName, new LinkedList<HRegionInfo>());
-
-      for (HRegionInfo region : regions) {
-
-        GroupInfo groupRegionShouldBelongsTo = null;
-        try {
-          groupRegionShouldBelongsTo = groupInfoManager.getGroupOfTable(region.getTable());
-        } catch (Exception e) {
-          LOG.debug("Error getting information for region " + region, e);
-        }
-        GroupInfo groupRegionActuallyBelongsTo = null;
-        try {
-          groupRegionActuallyBelongsTo =
-              groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
-        } catch (Exception e) {
-          LOG.debug("Error getting information for server " + serverName, e);
-        }
-
-        if (groupRegionActuallyBelongsTo != groupRegionShouldBelongsTo) {
-          // unassign it so it is assigned to a server in the right group
-          this.masterServices.getAssignmentManager().unassign(region);
-        } else {
-          correctAssignments.get(serverName).add(region);
-        }
-
-      }
+  @Override
+  public ServerName randomAssignment(HRegionInfo regionInfo, List<ServerName> servers) {
+    try {
+      ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+      ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+      generateGroupMaps(Lists.newArrayList(regionInfo), servers, regionMap, serverMap);
+      List<ServerName> filteredServers = serverMap.get(regionMap.keySet().iterator().next());
+      ServerName serverToReturn =
+          this.internalBalancer.randomAssignment(regionInfo, filteredServers);
+      return serverToReturn;
+    } catch(Exception e) {
+      LOG.warn("Failed to do random assignment.", e);
     }
-    return correctAssignments;
+    return null;
   }
 
   /**
@@ -416,8 +295,6 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
         if (groupName == null) {
           groupName = groupInfoManager.getDefaultGroupName();
           groupInfoManager.getGroup(groupName).addTable(region.getTable());
-          LOG.info("The region " + region +
-              " was not put in a group, so it was placed in the default group");
         }
         regionMap.put(groupName, region);
       }
@@ -430,48 +307,15 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
         if (groupName == null) {
           groupName = groupInfoManager.getDefaultGroupName();
           groupInfoManager.getGroup(groupName).addServer(serverName.getHostAndPort());
-          LOG.info("The server " + serverName +
-              " was not put in a group, so it was placed in the default group");
         }
         serverMap.put(groupName, serverName);
       }
-    } catch (IOException e) {
-      LOG.warn("Failed to generate group maps.", e);
+    } catch (IOException exp) {
+      LOG.warn("Failed to generate group maps.", exp);
     }
   }
 
-  private List<HRegionInfo> getMisplacedRegions(Map<HRegionInfo, ServerName> regions)
-      throws IOException {
-
-    List<HRegionInfo> misplacedRegions = new ArrayList<>();
-
-    for (HRegionInfo region : regions.keySet()) {
-      ServerName assignedServer = regions.get(region);
-      GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
-
-      if (groupInfo == null) {
-        String defaultGroupName = groupInfoManager.getDefaultGroupName();
-        GroupInfo defaultGroupInfo = groupInfoManager.getGroup(defaultGroupName);
-        defaultGroupInfo.addTable(region.getTable());
-        groupInfo = defaultGroupInfo;
-        LOG.info("The region " + region +
-            " was not put in a group, so it was placed in the default group");
-      }
-
-      if (!groupInfo.containsServer(assignedServer.getHostAndPort())) {
-        LOG.warn("Found misplaced region: " + region.getRegionNameAsString() + " on server: "
-            + assignedServer + " found in group: " + groupInfoManager
-            .getGroupOfServer(assignedServer.getHostAndPort()) + " outside of group " +
-            groupInfo.getName());
-        misplacedRegions.add(region);
-      }
-    }
-    return misplacedRegions;
-  }
-
-  private List<ServerName> filterOfflineServers(
-      GroupInfo groupInfo, List<ServerName> servers) {
-
+  private List<ServerName> filterOfflineServers(GroupInfo groupInfo, List<ServerName> servers) {
     if (groupInfo != null) {
       ArrayList<ServerName> onlineServers = new ArrayList<>();
       for (String server : groupInfo.getServers()) {
@@ -486,4 +330,84 @@ import org.apache.hadoop.hbase.util.ReflectionUtils;
     return Collections.EMPTY_LIST;
   }
 
+  private List<HRegionInfo> getMisplacedRegions(Map<HRegionInfo, ServerName> regions)
+      throws IOException {
+    List<HRegionInfo> misplacedRegions = new ArrayList<>();
+    for (HRegionInfo region : regions.keySet()) {
+      ServerName assignedServer = regions.get(region);
+      GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
+      if (groupInfo == null) {
+        String defaultGroupName = groupInfoManager.getDefaultGroupName();
+        GroupInfo defaultGroupInfo = groupInfoManager.getGroup(defaultGroupName);
+        defaultGroupInfo.addTable(region.getTable());
+        groupInfo = defaultGroupInfo;
+      }
+      if (!groupInfo.containsServer(assignedServer.getHostAndPort())) {
+        LOG.warn("Found misplaced region: " + region.getRegionNameAsString() + " on server: "
+            + assignedServer + " found in group: " + groupInfoManager
+            .getGroupOfServer(assignedServer.getHostAndPort()) + " outside of group " +
+            groupInfo.getName());
+        misplacedRegions.add(region);
+      }
+    }
+    return misplacedRegions;
+  }
+
+  /**
+   * If a region is assigned to a server in the wrong group, unassign it so it is assigned to a
+   * a server in he right one.
+   *
+   * @param existingAssignments a map of servers and the regions that it holds
+   * @return a map of servers and regions within it that belongs to the same group
+   */
+  private Map<ServerName, List<HRegionInfo>> correctAssignments(
+      Map<ServerName, List<HRegionInfo>> existingAssignments) {
+    Map<ServerName, List<HRegionInfo>> correctAssignments = new TreeMap<>();
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : existingAssignments.entrySet()) {
+      ServerName serverName = entry.getKey();
+      List<HRegionInfo> regions = entry.getValue();
+      correctAssignments.put(serverName, new LinkedList<HRegionInfo>());
+      for (HRegionInfo region : regions) {
+        GroupInfo groupRegionShouldBelongsTo = null;
+        try {
+          groupRegionShouldBelongsTo = groupInfoManager.getGroupOfTable(region.getTable());
+        } catch (Exception e) {
+          LOG.debug("Error getting information for region " + region, e);
+        }
+        GroupInfo groupRegionActuallyBelongsTo = null;
+        try {
+          groupRegionActuallyBelongsTo =
+              groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
+        } catch (Exception e) {
+          LOG.debug("Error getting information for server " + serverName, e);
+        }
+        if (groupRegionActuallyBelongsTo != groupRegionShouldBelongsTo) {
+          // unassign it so it is assigned to a server in the right group
+          this.masterServices.getAssignmentManager().unassign(region);
+        } else {
+          correctAssignments.get(serverName).add(region);
+        }
+      }
+    }
+    return correctAssignments;
+  }
+
+  @Override
+  public void initialize() throws HBaseIOException {
+    if (this.groupInfoManager == null) {
+      try {
+        this.groupInfoManager = new GroupInfoManagerImpl(this.config);
+      } catch (Exception exp) {
+        throw new HBaseIOException("Failed to load group info manager.", exp);
+      }
+    }
+    String internalBalancerClassName = this.groupInfoManager.getDefaultBalancerClassName();
+    Class<? extends LoadBalancer> balancerClass =
+        config.getClass(internalBalancerClassName, SimpleLoadBalancer.class, LoadBalancer.class);
+    this.internalBalancer = ReflectionUtils.newInstance(balancerClass);
+    this.internalBalancer.setClusterStatus(clusterStatus);
+    this.internalBalancer.setMasterServices(masterServices);
+    this.internalBalancer.setConf(config);
+    this.internalBalancer.initialize();
+  }
 }

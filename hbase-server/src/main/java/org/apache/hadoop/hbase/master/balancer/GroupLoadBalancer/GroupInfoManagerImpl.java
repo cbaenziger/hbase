@@ -1,5 +1,6 @@
 /**
  * Copyright The Apache Software Foundation
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +8,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -69,7 +72,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @param groupInfo the group name
    * @throws IOException
    */
-  @Override public synchronized void addGroup(GroupInfo groupInfo) {
+  @Override
+  public synchronized void addGroup(GroupInfo groupInfo) {
     if (groupMap.containsKey(groupInfo.getName())) {
       throw new IllegalArgumentException("Group already exists: " + groupInfo.getName());
     }
@@ -92,7 +96,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @return GroupInfo object of the group that the server belongs to
    * @throws IOException
    */
-  @Override public GroupInfo getGroupOfServer(String hostPort) throws IOException {
+  @Override
+  public GroupInfo getGroupOfServer(String hostPort) throws IOException {
     for (GroupInfo groupInfo : groupMap.values()) {
       if (groupInfo.containsServer(hostPort)) {
         return groupInfo;
@@ -108,7 +113,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @return An instance of GroupInfo
    * @throws IOException
    */
-  @Override public GroupInfo getGroup(String groupName) throws IOException {
+  @Override
+  public GroupInfo getGroup(String groupName) throws IOException {
     GroupInfo groupInfo = groupMap.get(groupName);
     return groupInfo;
   }
@@ -120,7 +126,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @return GroupInfo object of the group that the table belongs to
    * @throws IOException
    */
-  @Override public GroupInfo getGroupOfTable(TableName tableName) throws IOException {
+  @Override
+  public GroupInfo getGroupOfTable(TableName tableName) throws IOException {
     for (GroupInfo groupInfo : this.groupMap.values()) {
       if (groupInfo.containsTable(tableName)) {
         return groupInfo;
@@ -132,7 +139,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
   /**
    * This method is not supported in this implementation.
    */
-  @Override public synchronized void moveTables(Set<TableName> tableNames, String groupName)
+  @Override
+  public synchronized void moveTables(Set<TableName> tableNames, String groupName)
       throws IOException {
     throw new IllegalArgumentException("This method should not be called.");
   }
@@ -140,7 +148,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
   /**
    * This method is not supported in this implementation.
    */
-  @Override public synchronized void removeGroup(String groupName) throws IOException {
+  @Override
+  public synchronized void removeGroup(String groupName) throws IOException {
     throw new IllegalArgumentException("This method should not be called.");
   }
 
@@ -150,7 +159,8 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
    * @return a list of GroupInfo
    * @throws IOException
    */
-  @Override public List<GroupInfo> listGroups() throws IOException {
+  @Override
+  public List<GroupInfo> listGroups() throws IOException {
     List<GroupInfo> list = Lists.newLinkedList(groupMap.values());
     return list;
   }
@@ -158,27 +168,31 @@ public class GroupInfoManagerImpl implements GroupInfoManager, ServerListener {
   /**
    * This method is not support in this implementation.
    */
-  @Override public boolean isOnline() {
+  @Override
+  public boolean isOnline() {
     throw new IllegalArgumentException("This method should not be called.");
   }
 
   /**
    * This method is not support in this implementation.
    */
-  @Override public synchronized void refresh() throws IOException {
+  @Override
+  public synchronized void refresh() throws IOException {
     throw new IllegalArgumentException("This method should not be called.");
   }
 
   /**
    * This method is not support in this implementation.
    */
-  @Override public void serverAdded(ServerName serverName) {
+  @Override
+  public void serverAdded(ServerName serverName) {
   }
 
   /**
    * This method is not support in this implementation.
    */
-  @Override public void serverRemoved(ServerName serverName) {
+  @Override
+  public void serverRemoved(ServerName serverName) {
     throw new IllegalArgumentException("This method should not be called.");
   }
 

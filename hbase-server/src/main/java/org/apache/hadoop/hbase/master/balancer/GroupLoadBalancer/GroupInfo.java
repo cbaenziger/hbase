@@ -134,15 +134,15 @@ public class GroupInfo implements Serializable {
 
   @Override
   public String toString() {
-    StringBuilder stringBuilder = new StringBuilder();
-    stringBuilder.append("GroupName:");
-    stringBuilder.append(this.name);
-    stringBuilder.append(", ");
-    stringBuilder.append(" Servers:");
-    stringBuilder.append(this.servers);
-    stringBuilder.append(" Tables: ");
-    stringBuilder.append(this.tables);
-    return stringBuilder.toString();
+    StringBuilder sb = new StringBuilder();
+    sb.append("GroupName:");
+    sb.append(this.name);
+    sb.append(", ");
+    sb.append(" Servers:");
+    sb.append(this.servers);
+    sb.append(" Tables: ");
+    sb.append(this.tables);
+    return sb.toString();
 
   }
 
