@@ -20,9 +20,12 @@
 
 package org.apache.hadoop.hbase.master.balancer.grouploadbalancer;
 
+import com.google.common.collect.LinkedListMultimap;
+import com.google.common.collect.ListMultimap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HBaseInterfaceAudience;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.ServerName;
@@ -151,6 +154,68 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
       regionPlans.clear();
     }
     return regionPlans;
+  }
+
+  @Override
+  public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
+      List<ServerName> servers) {
+    Map<ServerName, List<HRegionInfo>> assignments = new HashMap<>();
+    ListMultimap<String, HRegionInfo> regionMap = LinkedListMultimap.create();
+    ListMultimap<String, ServerName> serverMap = LinkedListMultimap.create();
+    try {
+      generateGroupMaps(regions, servers, regionMap, serverMap);
+      for (String groupName : regionMap.keySet()) {
+        if (regionMap.get(groupName).size() > 0) {
+          Map<ServerName, List<HRegionInfo>> result = this.internalBalancer
+              .roundRobinAssignment(regionMap.get(groupName), serverMap.get(groupName));
+          if (result != null) {
+            assignments.putAll(result);
+          }
+        }
+      }
+    } catch (HBaseIOException exp) {
+      LOG.warn("Error with round robin assignments.", exp);
+    }
+    return assignments;
+  }
+
+  /**
+   * Populates regionMap and serverMap so that regions and servers of the same group are together.
+   *
+   * @param regions        a list of all the regions
+   * @param servers a list of all the servers
+   * @param regionMap      a mapping of group names as a string to the regions it contains
+   * @param serverMap      a mapping of group names as a string to the servers it contains
+   */
+  private void generateGroupMaps(List<HRegionInfo> regions, List<ServerName> servers,
+      ListMultimap<String, HRegionInfo> regionMap, ListMultimap<String, ServerName> serverMap) {
+    try {
+      // put all regions in regionMap
+      for (HRegionInfo region : regions) {
+        GroupInfo groupInfo = groupInfoManager.getGroupOfTable(region.getTable());
+        String groupName = (groupInfo == null) ? null : groupInfo.getName();
+        // if a table doesn't belong to a group put it in the default group
+        if (groupName == null) {
+          groupName = groupInfoManager.getDefaultGroupName();
+          groupInfoManager.getGroupInfo(groupName).addTable(region.getTable());
+        }
+        regionMap.put(groupName, region);
+      }
+
+      // put all servers in serverMap
+      for (ServerName serverName : servers) {
+        GroupInfo groupInfo = groupInfoManager.getGroupOfServer(serverName.getHostAndPort());
+        String groupName = (groupInfo == null) ? null : groupInfo.getName();
+        // if a table doesn't belong in a group put it in the default group
+        if (groupName == null) {
+          groupName = groupInfoManager.getDefaultGroupName();
+          groupInfoManager.getGroupInfo(groupName).addServer(serverName.getHostAndPort());
+        }
+        serverMap.put(groupName, serverName);
+      }
+    } catch (IOException exp) {
+      LOG.warn("Failed to generate group maps.", exp);
+    }
   }
 
   /**
