@@ -36,6 +36,8 @@ import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.master.MasterServices;
 import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.master.balancer.BaseLoadBalancer;
+import org.apache.hadoop.hbase.master.balancer.SimpleLoadBalancer;
+import org.apache.hadoop.hbase.util.ReflectionUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -52,6 +54,10 @@ import java.util.TreeMap;
  */
 @InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG)
 public class GroupBasedLoadBalancer extends BaseLoadBalancer {
+
+  // Config for pluggable load balancers
+  private static final String HBASE_GROUP_LOADBALANCER_CLASS =
+      "hbase.master.balancer.grouploadbalancer.internalbalancerclass";
 
   private static final Log LOG = LogFactory.getLog(GroupBasedLoadBalancer.class);
 
@@ -400,5 +406,27 @@ public class GroupBasedLoadBalancer extends BaseLoadBalancer {
       }
     }
     return serversForGroupInfo;
+  }
+
+  @Override
+  public void initialize() throws HBaseIOException {
+    if (this.groupInfoManager == null) {
+      try {
+        this.groupInfoManager = new GroupInfoManagerImpl(this.config);
+      } catch (Exception exp) {
+        throw new HBaseIOException("Failed to load group info manager.", exp);
+      }
+    }
+    String internalBalancerClassName = config.get(HBASE_GROUP_LOADBALANCER_CLASS);
+    if (internalBalancerClassName == null) {
+      LOG.warn("Internal balancer class name was not defined so the default is being used.");
+    }
+    Class<? extends LoadBalancer> balancerClass =
+        config.getClass(internalBalancerClassName, SimpleLoadBalancer.class, LoadBalancer.class);
+    this.internalBalancer = ReflectionUtils.newInstance(balancerClass);
+    this.internalBalancer.setClusterStatus(clusterStatus);
+    this.internalBalancer.setMasterServices(masterServices);
+    this.internalBalancer.setConf(config);
+    this.internalBalancer.initialize();
   }
 }
