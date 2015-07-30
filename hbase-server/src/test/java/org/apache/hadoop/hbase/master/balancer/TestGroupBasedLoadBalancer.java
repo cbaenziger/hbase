@@ -39,9 +39,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.Assert.assertTrue;
 
@@ -158,5 +160,71 @@ public class TestGroupBasedLoadBalancer extends BalancerTestBase {
     assertTrue(regionPlanList.get(0).getDestination().getPort() == 60011);
     assertTrue(regionPlanList.get(1).getSource().getPort() == 60002);
     assertTrue(regionPlanList.get(1).getDestination().getPort() == 60012);
+  }
+
+  @Test
+  public void testRoundRobinAssignment() throws Exception {
+
+    List<HRegionInfo> regions = new ArrayList<>();
+    regions.add(region1);
+    regions.add(region2);
+    regions.add(region3);
+    regions.add(region4);
+    regions.add(region5);
+    regions.add(region6);
+    regions.add(region7);
+    regions.add(region8);
+    List<ServerName> servers = new ArrayList<>();
+    servers.add(serverName1);
+    servers.add(serverName2);
+    servers.add(serverName3);
+    servers.add(serverName4);
+
+    Map<ServerName, List<HRegionInfo>> assignment =
+        loadBalancer.roundRobinAssignment(regions, servers);
+
+    Set<String> tablesGroup1ShouldContain = new HashSet<>();
+    Set<String> tablesGroup2ShouldContain = new HashSet<>();
+
+    tablesGroup1ShouldContain.add("test_table_1");
+    tablesGroup1ShouldContain.add("test_table_2");
+    tablesGroup1ShouldContain.add("test_table_3");
+    tablesGroup1ShouldContain.add("test_table_4");
+
+    tablesGroup2ShouldContain.add("test_table_5");
+    tablesGroup2ShouldContain.add("test_table_6");
+    tablesGroup2ShouldContain.add("test_table_7");
+    tablesGroup2ShouldContain.add("test_table_8");
+
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : assignment.entrySet()) {
+
+      ServerName serverNameFromAssignment = entry.getKey();
+      List<HRegionInfo> regionsFromAssignment = entry.getValue();
+      // Sort the regions based on the source server
+      Collections.sort(regionsFromAssignment, new Comparator<HRegionInfo>() {
+        @Override public int compare(HRegionInfo o1, HRegionInfo o2) {
+          return o1.getRegionNameAsString().compareTo(o2.getRegionNameAsString());
+        }
+      });
+
+      assertTrue(regionsFromAssignment.size() == 2);
+
+      HRegionInfo regionFromAssignment1 = regionsFromAssignment.get(0);
+      HRegionInfo regionFromAssignment2 = regionsFromAssignment.get(1);
+
+      // Assert that the regions were put in servers of the right group
+      if (serverNameFromAssignment.getPort() == 60001
+          || serverNameFromAssignment.getPort() == 60011) {
+        assertTrue(
+            tablesGroup1ShouldContain.contains(regionFromAssignment1.getTable().getNameAsString()));
+        assertTrue(
+            tablesGroup1ShouldContain.contains(regionFromAssignment2.getTable().getNameAsString()));
+      } else {
+        assertTrue(
+            tablesGroup2ShouldContain.contains(regionFromAssignment1.getTable().getNameAsString()));
+        assertTrue(
+            tablesGroup2ShouldContain.contains(regionFromAssignment2.getTable().getNameAsString()));
+      }
+    }
   }
 }
