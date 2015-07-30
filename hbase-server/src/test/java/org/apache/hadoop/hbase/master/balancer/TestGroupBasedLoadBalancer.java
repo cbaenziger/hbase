@@ -227,4 +227,63 @@ public class TestGroupBasedLoadBalancer extends BalancerTestBase {
       }
     }
   }
+
+  @Test
+  public void testRetainAssignment() throws Exception {
+
+    // Create a map where 2 out of the 8 regions are on servers of the wrong group and within
+    // a group the region placement is unbalanced
+    Map<HRegionInfo, ServerName> regions = new HashMap<>();
+    regions.put(region8, serverName1);
+    regions.put(region1, serverName1);
+    regions.put(region2, serverName1);
+    regions.put(region3, serverName1);
+    regions.put(region4, serverName3);
+    regions.put(region5, serverName3);
+    regions.put(region6, serverName3);
+    regions.put(region7, serverName3);
+
+    List<ServerName> servers = new ArrayList<>(); servers.add(serverName1);
+    servers.add(serverName2); servers.add(serverName3); servers.add(serverName4);
+
+    Set<String> tablesGroup1ShouldContain = new HashSet<>();
+    Set<String> tablesGroup2ShouldContain = new HashSet<>();
+
+    tablesGroup1ShouldContain.add("test_table_1");
+    tablesGroup1ShouldContain.add("test_table_2");
+    tablesGroup1ShouldContain.add("test_table_3");
+    tablesGroup1ShouldContain.add("test_table_4");
+
+    tablesGroup2ShouldContain.add("test_table_5"); tablesGroup2ShouldContain.add("test_table_6");
+    tablesGroup2ShouldContain.add("test_table_7"); tablesGroup2ShouldContain.add("test_table_8");
+
+    Map<ServerName, List<HRegionInfo>> assignments =
+        loadBalancer.retainAssignment(regions, servers);
+
+    for (Map.Entry<ServerName, List<HRegionInfo>> entry : assignments.entrySet()) {
+      ServerName serverNameFromAssignment = entry.getKey();
+      List<HRegionInfo> regionsFromAssignment = entry.getValue();
+      if (serverNameFromAssignment.getPort() == 60001
+          || serverNameFromAssignment.getPort() == 60011) {
+        if (serverNameFromAssignment.getPort() == 60001) {
+          // this server has to have at least 3 regions since it started off with 3 correct regions
+          // and retainAssignment prioritizes not moving regions around within servers of the right
+          // group over groups being balanced
+          assertTrue(regionsFromAssignment.size() >= 3);
+        } for (HRegionInfo region : regionsFromAssignment) {
+          assertTrue(tablesGroup1ShouldContain.contains(region.getTable().getNameAsString()));
+        }
+      } else if (serverNameFromAssignment.getPort() == 60002
+          || serverNameFromAssignment.getPort() == 60012) {
+        if (serverNameFromAssignment.getPort() == 60002) {
+          // this server has to have at least 3 regions since it started off with 3 correct regions
+          // and retainAssignment prioritizes not moving regions around within servers of the right
+          // group over groups being balanced
+          assertTrue(regionsFromAssignment.size() >= 3);
+        } for (HRegionInfo region : regionsFromAssignment) {
+          assertTrue(tablesGroup2ShouldContain.contains(region.getTable().getNameAsString()));
+        }
+      }
+    }
+  }
 }
