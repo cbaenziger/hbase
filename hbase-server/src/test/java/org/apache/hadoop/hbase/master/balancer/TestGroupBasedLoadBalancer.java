@@ -352,4 +352,46 @@ public class TestGroupBasedLoadBalancer extends BalancerTestBase {
       }
     }
   }
+
+  @Test
+  public void testRandomAssignment() throws Exception {
+
+    List<ServerName> servers = new ArrayList<>();
+    servers.add(serverName1);
+    servers.add(serverName2);
+    servers.add(serverName3);
+    servers.add(serverName4);
+
+    Set<Integer> group1ServerPorts = new HashSet<>();
+    group1ServerPorts.add(60001);
+    group1ServerPorts.add(60011);
+    Set<Integer> group2ServerPorts = new HashSet<>();
+    group2ServerPorts.add(60002);
+    group2ServerPorts.add(60012);
+
+    // Make sure that randomAssignment returns the right servers
+    ServerName serverName = loadBalancer.randomAssignment(region1, servers);
+    assertTrue(group1ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region2, servers);
+    assertTrue(group1ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region3, servers);
+    assertTrue(group1ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region4, servers);
+    assertTrue(group1ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region5, servers);
+    assertTrue(group2ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region6, servers);
+    assertTrue(group2ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region7, servers);
+    assertTrue(group2ServerPorts.contains(serverName.getPort()));
+
+    serverName = loadBalancer.randomAssignment(region8, servers);
+    assertTrue(group2ServerPorts.contains(serverName.getPort()));
+  }
 }
