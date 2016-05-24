@@ -318,6 +318,71 @@ function mvnsite_filefilter
   fi
 }
 
+######################################
+
+add_test_type hbaselogs
+
+## @description  hbaselogs file filter
+## @audience     private
+## @stability    evolving
+## @param        filename
+function hbaselogs_filefilter
+{
+  local filename=$1
+
+  if [[ ${filename} =~ \.java$ ]]; then
+    add_test hbaselogs
+  fi
+}
+
+## @description  hbaselogs patch file check
+## @audience     private
+## @stability    evolving
+## @param        filename
+function hbaselogs_patchfile
+{
+  local patchfile=$1
+  local -Ai entries
+  local result
+
+  if [[ "${BUILDMODE}" = full ]]; then
+    return 0
+  fi
+
+  verify_needed_test hbaselogs
+  if [[ $? == 0 ]]; then
+    return 0
+  fi
+
+  big_console_header "Checking for changed log entries"
+
+  start_clock
+
+  for level in debug error fatal info trace warn; do
+    for action in "add +" "remove -"; do
+      # create a data structure akin to:
+      # entries='( [error]="0" [error_remove]="0" [error_add]="0"
+      #            [debug]="3" [debug_remove]="1" [debug_add]="2" )'
+      entries+=( [${level}_${action% *}]=$(${GREP} -e "^${action#* }.*LOG.${level}" "${patchfile}" | wc -l)
+                 [${level}]+=${entries[${level}_${action% *}]} )
+    done
+
+    if [[ ${entries[${level}]} -gt 0 ]]; then
+      add_vote_table +1 hbaselogs "" "Patch changed +${entries[${level}_add]}/-${entries[${level}_remove]} ${level} log entries"
+      ((result=result+1))
+    else
+      add_vote_table 0 hbaselogs "" "Patch changed ${entries[${level}]} ${level} log entries"
+    fi
+  done
+
+  echo "Patch changed $result variety(ies) of log entries"
+
+  return 0
+}
+
+
+######################################
+
 ## This is named so that yetus will check us right after running tests.
 ## Essentially, we check for normal failures and then we look for zombies.
 #function hbase_unit_logfilter
