@@ -29,6 +29,9 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import org.apache.log4j.Logger;
+import org.apache.log4j.Level;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 
@@ -56,6 +59,10 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
 
   private static final Log LOG = LogFactory
       .getLog(CoprocessorWhitelistMasterObserver.class);
+  static {
+    Logger.getLogger(CoprocessorWhitelistMasterObserver.class).setLevel(Level.TRACE);
+    Logger.getLogger("org.apache.hbase.server").setLevel(Level.TRACE);
+  }
 
   @Override
   public void preModifyTable(ObserverContext<MasterCoprocessorEnvironment> ctx,
@@ -73,8 +80,13 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
    * Validates a single whitelist path against the coprocessor path
    * @param  coproc_path the path to the coprocessor including scheme
    * @param  wl_path     can be:
-   *                      1) a specific filesystem (e.g. hdfs://my-cluster/)
-   *                      2) a wildcard path for {@link FilenameUtils.wildcardMatch}
+   *                      1) a "*" to wildcard all coprocessor paths
+   *                      2) a specific filesystem (e.g. hdfs://my-cluster/)
+   *                      3) a wildcard path to be evaluated by
+   *                         {@link FilenameUtils.wildcardMatch}
+   *                         path can specify scheme or not (e.g.
+   *                         "file:///usr/hbase/coprocessors" or for all
+   *                         filesystems "/usr/hbase/coprocessors")
    * @return             if the path was found under the wl_path
    * @throws IOException if a failure occurs in getting the path file system
    */
@@ -143,7 +155,7 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
 
     MasterServices services = ctx.getEnvironment().getMasterServices();
     Configuration conf = services.getConfiguration();
- 
+
     Collection<String> paths =
         conf.getStringCollection(
             CP_COPROCESSOR_WHITELIST_PATHS_KEY);
@@ -166,6 +178,10 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
       }
 
       String coproc_path_str = matcher.group(1).trim();
+      // Check if coprocessor is being loaded via the classpath (i.e. no file path)
+      if (coproc_path_str == "") {
+        break;
+      }
       Path coproc_path = new Path(coproc_path_str);
       String coprocessor_class = matcher.group(2).trim();
 

@@ -22,25 +22,27 @@ import static org.junit.Assert.fail;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.log4j.Logger;
-import org.apache.log4j.Level;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.testclassification.MediumTests;
-import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.Coprocessor;
+import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableNotFoundException;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TableNotEnabledException;
+import org.apache.hadoop.hbase.TableNotFoundException;
+import org.apache.hadoop.hbase.testclassification.MediumTests;
 import org.apache.hadoop.hbase.testclassification.MediumTests;
 import org.apache.hadoop.hbase.testclassification.SecurityTests;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 
 import org.junit.AfterClass;
 import org.junit.Test;
@@ -66,7 +68,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   private static final byte[] TEST_FAMILY = Bytes.toBytes("fam1");
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDownTestCoprocessorWhitelistMasterObserver() throws Exception {
     Admin admin = UTIL.getHBaseAdmin();
     try {
       try {
@@ -115,8 +117,9 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     Connection connection = ConnectionFactory.createConnection(conf);
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = t.getTableDescriptor();
-    htd.addCoprocessorWithSpec(coprocessor_path +
-        "|net.clayb.hbase.coprocessor.CoprocessorShouldFail|1001");
+    htd.addCoprocessor("net.clayb.hbase.coprocessor.CoprocessorShouldFail",
+      new Path(coprocessor_path),
+      Coprocessor.PRIORITY_USER, null);
     LOG.info("Modifying Table");
     try {
       connection.getAdmin().modifyTable(TEST_TABLE, htd);
@@ -124,6 +127,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     } catch (IOException e) {
       // swallow exception from coprocessor
     }
+    LOG.info("Done Modifying Table");
     assertEquals(0, t.getTableDescriptor().getCoprocessors().size());
   }
 
@@ -160,10 +164,13 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     admin.disableTable(TEST_TABLE);
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = t.getTableDescriptor();
-    htd.addCoprocessorWithSpec(coprocessor_path +
-        "|net.clayb.hbase.coprocessor.RegionObserverDoesNotExist|1001");
+    htd.addCoprocessor("net.clayb.hbase.coprocessor.RegionObserverDoesNotExist",
+      new Path(coprocessor_path),
+      Coprocessor.PRIORITY_USER, null);
+    LOG.info("Modifying Table");
     admin.modifyTable(TEST_TABLE, htd);
     assertEquals(1, t.getTableDescriptor().getCoprocessors().size());
+    LOG.info("Done Modifying Table");
   }
 
   /**
@@ -261,5 +268,74 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   public void testBlanketWhitelist() throws Exception {
     negativeTestCase(new String[]{"*"},
         "hdfs:///permitted/couldnotpossiblyexist.jar");
+  }
+
+  /**
+   * Test a table creation including a coprocessor path
+   * which is not whitelisted
+   * @result Table will not be created due to the offending coprocessor
+   */
+  @Test
+  @Category(MediumTests.class)
+  public void testCreationNonWhitelistedCoprocessorPath() throws Exception {
+    Configuration conf = UTIL.getConfiguration();
+    // load coprocessor under test
+    conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY,
+        CoprocessorWhitelistMasterObserver.class.getName());
+    conf.setStrings(CoprocessorWhitelistMasterObserver.CP_COPROCESSOR_WHITELIST_PATHS_KEY,
+        new String[]{});
+    // set retries low to raise exception quickly
+    conf.setInt("hbase.client.retries.number", 1);
+    UTIL.startMiniCluster();
+    HTableDescriptor htd = new HTableDescriptor(TEST_TABLE);
+    HColumnDescriptor hcd = new HColumnDescriptor(TEST_FAMILY);
+    htd.addFamily(hcd);
+    htd.addCoprocessor("net.clayb.hbase.coprocessor.RegionObserverClay",
+      new Path("file:///notpermitted/couldnotpossiblyexist.jar"),
+      Coprocessor.PRIORITY_USER, null);
+    Connection connection = ConnectionFactory.createConnection(conf);
+    Admin admin = connection.getAdmin();
+    LOG.info("Creating Table");
+    try {
+      admin.createTable(htd);
+      fail("Expected coprocessor to raise IOException");
+    } catch (IOException e) {
+      // swallow exception from coprocessor
+    }
+    LOG.info("Done Creating Table");
+    // ensure table was not created
+    assertEquals(new HTableDescriptor[0],
+      admin.listTables("^" + TEST_TABLE.getNameAsString() + "$"));
+  }
+
+  /**
+   * Test a table creation including a coprocessor path
+   * which is on the classpath
+   * @result Table will be created with the coprocessor
+   */
+//  @Test
+  @Category(MediumTests.class)
+  public void testCreationClasspathCoprocessor() throws Exception {
+    Configuration conf = UTIL.getConfiguration();
+    // load coprocessor under test
+    conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY,
+        CoprocessorWhitelistMasterObserver.class.getName());
+    conf.setStrings(CoprocessorWhitelistMasterObserver.CP_COPROCESSOR_WHITELIST_PATHS_KEY,
+        new String[]{});
+    // set retries low to raise exception quickly
+    conf.setInt("hbase.client.retries.number", 1);
+    UTIL.startMiniCluster();
+    HTableDescriptor htd = new HTableDescriptor(TEST_TABLE);
+    HColumnDescriptor hcd = new HColumnDescriptor(TEST_FAMILY);
+    htd.addFamily(hcd);
+    htd.addCoprocessor("org.apache.hadoop.hbase.coprocessor.BaseRegionObserver");
+    Connection connection = ConnectionFactory.createConnection(conf);
+    Admin admin = connection.getAdmin();
+    LOG.info("Creating Table");
+    admin.createTable(htd);
+    // ensure table was created and coprocessor is added to table
+    LOG.info("Done Creating Table");
+    Table t = connection.getTable(TEST_TABLE);
+    assertEquals(1, t.getTableDescriptor().getCoprocessors().size());
   }
 }
