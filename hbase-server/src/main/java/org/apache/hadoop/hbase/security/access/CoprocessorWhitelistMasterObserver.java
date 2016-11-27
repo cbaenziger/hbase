@@ -179,7 +179,7 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
 
       String coproc_path_str = matcher.group(1).trim();
       // Check if coprocessor is being loaded via the classpath (i.e. no file path)
-      if (coproc_path_str == "") {
+      if (coproc_path_str.equals("")) {
         break;
       }
       Path coproc_path = new Path(coproc_path_str);
