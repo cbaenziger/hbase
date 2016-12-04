@@ -59,10 +59,6 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
 
   private static final Log LOG = LogFactory
       .getLog(CoprocessorWhitelistMasterObserver.class);
-  static {
-    Logger.getLogger(CoprocessorWhitelistMasterObserver.class).setLevel(Level.TRACE);
-    Logger.getLogger("org.apache.hbase.server").setLevel(Level.TRACE);
-  }
 
   @Override
   public void preModifyTable(ObserverContext<MasterCoprocessorEnvironment> ctx,
@@ -78,8 +74,8 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
 
   /**
    * Validates a single whitelist path against the coprocessor path
-   * @param  coproc_path the path to the coprocessor including scheme
-   * @param  wl_path     can be:
+   * @param  coprocPath the path to the coprocessor including scheme
+   * @param  wlPath     can be:
    *                      1) a "*" to wildcard all coprocessor paths
    *                      2) a specific filesystem (e.g. hdfs://my-cluster/)
    *                      3) a wildcard path to be evaluated by
@@ -87,56 +83,56 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
    *                         path can specify scheme or not (e.g.
    *                         "file:///usr/hbase/coprocessors" or for all
    *                         filesystems "/usr/hbase/coprocessors")
-   * @return             if the path was found under the wl_path
+   * @return             if the path was found under the wlPath
    * @throws IOException if a failure occurs in getting the path file system
    */
-  private static boolean validatePath(Path coproc_path, Path wl_path,
+  private static boolean validatePath(Path coprocPath, Path wlPath,
       Configuration conf) throws IOException {
     // verify if all are allowed
-    if (wl_path.toString().equals("*")) {
+    if (wlPath.toString().equals("*")) {
       return(true);
     }
 
-    // verify we are on the same filesystem if wl_path has a scheme
-    if (!wl_path.isAbsoluteAndSchemeAuthorityNull()) {
-      String wl_path_scheme = wl_path.toUri().getScheme();
-      String coproc_path_scheme = coproc_path.toUri().getScheme();
-      String wl_path_host = wl_path.toUri().getHost();
-      String coproc_path_host = coproc_path.toUri().getHost();
-      if (wl_path_scheme != null) {
-        wl_path_scheme = wl_path_scheme.toString().toLowerCase();
+    // verify we are on the same filesystem if wlPath has a scheme
+    if (!wlPath.isAbsoluteAndSchemeAuthorityNull()) {
+      String wlPathScheme = wlPath.toUri().getScheme();
+      String coprocPathScheme = coprocPath.toUri().getScheme();
+      String wlPathHost = wlPath.toUri().getHost();
+      String coprocPathHost = coprocPath.toUri().getHost();
+      if (wlPathScheme != null) {
+        wlPathScheme = wlPathScheme.toString().toLowerCase();
       } else {
-        wl_path_scheme = "";
+        wlPathScheme = "";
       }
-      if (wl_path_host != null) {
-        wl_path_host = wl_path_host.toString().toLowerCase();
+      if (wlPathHost != null) {
+        wlPathHost = wlPathHost.toString().toLowerCase();
       } else {
-        wl_path_host = "";
+        wlPathHost = "";
       }
-      if (coproc_path_scheme != null) {
-        coproc_path_scheme = coproc_path_scheme.toString().toLowerCase();
+      if (coprocPathScheme != null) {
+        coprocPathScheme = coprocPathScheme.toString().toLowerCase();
       } else {
-        coproc_path_scheme = "";
+        coprocPathScheme = "";
       }
-      if (coproc_path_host != null) {
-        coproc_path_host = coproc_path_host.toString().toLowerCase();
+      if (coprocPathHost != null) {
+        coprocPathHost = coprocPathHost.toString().toLowerCase();
       } else {
-        coproc_path_host = "";
+        coprocPathHost = "";
       }
-      if (!wl_path_scheme.equals(coproc_path_scheme) || !wl_path_host.equals(coproc_path_host)) {
+      if (!wlPathScheme.equals(coprocPathScheme) || !wlPathHost.equals(coprocPathHost)) {
         return(false);
       }
     }
 
     // allow any on this file-system (file systems were verified to be the same above)
-    if (wl_path.isRoot()) {
+    if (wlPath.isRoot()) {
       return(true);
     }
 
     // allow "loose" matches stripping scheme
     if (FilenameUtils.wildcardMatch(
-        Path.getPathWithoutSchemeAndAuthority(coproc_path).toString(),
-        Path.getPathWithoutSchemeAndAuthority(wl_path).toString())) {
+        Path.getPathWithoutSchemeAndAuthority(coprocPath).toString(),
+        Path.getPathWithoutSchemeAndAuthority(wlPath).toString())) {
       return(true);
     }
     return(false);
@@ -164,45 +160,45 @@ public class CoprocessorWhitelistMasterObserver extends BaseMasterObserver {
     for (int i = 0; i < coprocs.size(); i++) {
       String coproc = coprocs.get(i);
 
-      String coproc_spec = Bytes.toString(htd.getValue(
+      String coprocSpec = Bytes.toString(htd.getValue(
           Bytes.toBytes("coprocessor$" + (i + 1))));
-      if (coproc_spec == null) {
+      if (coprocSpec == null) {
         continue;
       }
 
       // File path is the 1st field of the coprocessor spec
       Matcher matcher =
-          HConstants.CP_HTD_ATTR_VALUE_PATTERN.matcher(coproc_spec);
+          HConstants.CP_HTD_ATTR_VALUE_PATTERN.matcher(coprocSpec);
       if (matcher == null || !matcher.matches()) {
         continue;
       }
 
-      String coproc_path_str = matcher.group(1).trim();
+      String coprocPathStr = matcher.group(1).trim();
       // Check if coprocessor is being loaded via the classpath (i.e. no file path)
-      if (coproc_path_str.equals("")) {
+      if (coprocPathStr.equals("")) {
         break;
       }
-      Path coproc_path = new Path(coproc_path_str);
-      String coprocessor_class = matcher.group(2).trim();
+      Path coprocPath = new Path(coprocPathStr);
+      String coprocessorClass = matcher.group(2).trim();
 
       boolean foundPathMatch = false;
-      for (String path_str : paths) {
-        Path wl_path = new Path(path_str);
+      for (String pathStr : paths) {
+        Path wlPath = new Path(pathStr);
         try {
-          foundPathMatch = validatePath(coproc_path, wl_path, conf);
+          foundPathMatch = validatePath(coprocPath, wlPath, conf);
           if (foundPathMatch == true) {
             LOG.debug(String.format("Coprocessor %s found in directory %s",
-                coprocessor_class, path_str));
+                coprocessorClass, pathStr));
             break;
           }
         } catch (IOException e) {
           LOG.warn(String.format("Failed to validate white list path %s for coprocessor path %s",
-              path_str, coproc_path_str));
+              pathStr, coprocPathStr));
         }
       }
       if (!foundPathMatch) {
         throw new IOException(String.format("Loading %s DENIED in %s",
-            coprocessor_class, CP_COPROCESSOR_WHITELIST_PATHS_KEY));
+            coprocessorClass, CP_COPROCESSOR_WHITELIST_PATHS_KEY));
       }
     }
   }

@@ -94,20 +94,20 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    * which is not whitelisted
    * @result An IOException should be thrown and caught
    *         to show coprocessor is working as desired
-   * @param whitelisted_paths A String array of paths to add in
+   * @param whitelistedPaths A String array of paths to add in
    *         for the whitelisting configuration
-   * @param coprocessor_path A String to use as the
+   * @param coprocessorPath A String to use as the
    *         path for a mock coprocessor
    */
-  private static void positiveTestCase(String[] whitelisted_paths,
-      String coprocessor_path) throws Exception {
+  private static void positiveTestCase(String[] whitelistedPaths,
+      String coprocessorPath) throws Exception {
     Configuration conf = UTIL.getConfiguration();
     // load coprocessor under test
     conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY,
         CoprocessorWhitelistMasterObserver.class.getName());
     conf.setStrings(
         CoprocessorWhitelistMasterObserver.CP_COPROCESSOR_WHITELIST_PATHS_KEY,
-        whitelisted_paths);
+        whitelistedPaths);
     // set retries low to raise exception quickly
     conf.setInt("hbase.client.retries.number", 1);
     UTIL.startMiniCluster();
@@ -118,7 +118,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = t.getTableDescriptor();
     htd.addCoprocessor("net.clayb.hbase.coprocessor.CoprocessorShouldFail",
-      new Path(coprocessor_path),
+      new Path(coprocessorPath),
       Coprocessor.PRIORITY_USER, null);
     LOG.info("Modifying Table");
     try {
@@ -136,13 +136,13 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    * which is whitelisted
    * @result The coprocessor should be added to the table
    *         descriptor successfully
-   * @param whitelisted_paths A String array of paths to add in
+   * @param whitelistedPaths A String array of paths to add in
    *         for the whitelisting configuration
-   * @param coprocessor_path A String to use as the
+   * @param coprocessorPath A String to use as the
    *         path for a mock coprocessor
    */
-  private static void negativeTestCase(String[] whitelisted_paths,
-      String coprocessor_path) throws Exception {
+  private static void negativeTestCase(String[] whitelistedPaths,
+      String coprocessorPath) throws Exception {
     Configuration conf = UTIL.getConfiguration();
     // load coprocessor under test
     conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY,
@@ -152,7 +152,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     // set a coprocessor whitelist path for test
     conf.setStrings(
         CoprocessorWhitelistMasterObserver.CP_COPROCESSOR_WHITELIST_PATHS_KEY,
-        whitelisted_paths);
+        whitelistedPaths);
     UTIL.startMiniCluster();
     Table table = UTIL.createTable(TEST_TABLE,
         new byte[][] { TEST_FAMILY });
@@ -165,7 +165,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = t.getTableDescriptor();
     htd.addCoprocessor("net.clayb.hbase.coprocessor.RegionObserverDoesNotExist",
-      new Path(coprocessor_path),
+      new Path(coprocessorPath),
       Coprocessor.PRIORITY_USER, null);
     LOG.info("Modifying Table");
     admin.modifyTable(TEST_TABLE, htd);
@@ -313,7 +313,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    * which is on the classpath
    * @result Table will be created with the coprocessor
    */
-//  @Test
+  @Test
   @Category(MediumTests.class)
   public void testCreationClasspathCoprocessor() throws Exception {
     Configuration conf = UTIL.getConfiguration();
