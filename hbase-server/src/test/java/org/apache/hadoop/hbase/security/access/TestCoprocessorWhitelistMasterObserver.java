@@ -111,7 +111,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = new HTableDescriptor(t.getTableDescriptor());
     for (int i=0; i<coprocessorPaths.length; i++) {
-      htd.addCoprocessor("net.clayb.hbase.coprocessor.NotWhitelisted" + i,
+      // Make the index part of the coprocessor name
+      htd.addCoprocessor("net.clayb.coprocessor.notWhitelisted.pathIndex" + i,
         new Path(coprocessorPaths[i]),
         Coprocessor.PRIORITY_USER, null);
     }
@@ -159,7 +160,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = new HTableDescriptor(t.getTableDescriptor());
     for (int i=0; i<coprocessorPaths.length; i++) {
-      htd.addCoprocessor("net.clayb.hbase.coprocessor.Whitelisted" + i,
+      // Make the index part of the coprocessor name
+      htd.addCoprocessor("net.clayb.coprocessor.whitelisted.pathIndex" + i,
         new Path(coprocessorPaths[i]),
         Coprocessor.PRIORITY_USER, null);
     }
@@ -184,9 +186,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   /**
    * Test a table creation including a coprocessor path
    * which is not whitelisted
-   * @result Coprocessor should be added to table descriptor
-   *         Table is disabled to avoid an IOException due to
-   *         the added coprocessor not actually existing on disk
+   * @result An IOException should be thrown and caught
+   *         to show coprocessor is working as desired
    */
   @Test
   public void testDifferentFileSystemNonWhitelisted() throws Exception {
@@ -236,9 +237,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   /**
    * Test a table modification adding a coprocessor path
    * which is whitelisted
-   * @result Coprocessor should be added to table descriptor
-   *         Table is disabled to avoid an IOException due to
-   *         the added coprocessor not actually existing on disk
+   * @result An IOException should be thrown and caught
+   *         to show coprocessor is working as desired
    */
   @Test
   public void testDFSNameNotWhitelistedFails() throws Exception {
@@ -257,6 +257,59 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   public void testBlanketWhitelist() throws Exception {
     negativeTestCase(new String[]{"*"},
         new String[]{"hdfs:///permitted/couldnotpossiblyexist.jar"});
+  }
+
+  /**
+   * Test a table modification adding coprocessors with paths one which
+   * is whitelisted first, then a second coprocessor which is not whitelisted
+   * @result An IOException should be thrown and caught
+   *         to show coprocessor is working as desired
+   */
+  @Test
+  public void testMultiplePathsFirstAllowedSecondDisallowed() throws Exception {
+    positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
+        new String[]{"hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar",
+                     "hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist.jar"});
+  }
+
+  /**
+   * Test a table modification adding coprocessors with paths one which
+   * is not whitelisted first, then a second coprocessor which is whitelisted
+   * @result An IOException should be thrown and caught
+   *         to show coprocessor is working as desired
+   */
+  @Test
+  public void testMultiplePathsSecondAllowedFirstDisallowed() throws Exception {
+    positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
+        new String[]{"hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist.jar",
+                     "hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar"});
+  }
+
+  /**
+   * Test a table modification adding coprocessor paths with two coprocessor
+   * paths, both of which are whitelisted
+   * @result Coprocessor should be added to table descriptor
+   *         Table is disabled to avoid an IOException due to
+   *         the added coprocessor not actually existing on disk
+   */
+  @Test
+  public void testTwoPathsAllAllowed() throws Exception {
+    positiveTestCase(new String[]{"hdfs://My-FileSystem"},
+        new String[]{"hdfs://My-FileSystem/permitted/couldnotpossiblyexist1.jar",
+                     "hdfs://My-FileSystem/permitted/couldnotpossiblyexist2.jar"});
+  }
+
+  /**
+   * Test a table modification adding coprocessor paths with two coprocessor
+   * paths, both of which are not whitelisted
+   * @result An IOException should be thrown and caught
+   *         to show coprocessor is working as desired
+   */
+  @Test
+  public void testTwoPathsAllDisallowed() throws Exception {
+    positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
+        new String[]{"hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist1.jar",
+                     "hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist2.jar"});
   }
 
   /**
