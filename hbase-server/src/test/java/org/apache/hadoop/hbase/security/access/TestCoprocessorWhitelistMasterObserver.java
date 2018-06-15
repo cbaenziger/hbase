@@ -90,11 +90,11 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    *         to show coprocessor is working as desired
    * @param whitelistedPaths A String array of paths to add in
    *         for the whitelisting configuration
-   * @param coprocessorPath A String to use as the
-   *         path for a mock coprocessor
+   * @param coprocessorPaths A String array of coprocessors to use
+   *         as the paths for mock coprocessors
    */
   private static void positiveTestCase(String[] whitelistedPaths,
-      String coprocessorPath) throws Exception {
+      String[] coprocessorPaths) throws Exception {
     Configuration conf = UTIL.getConfiguration();
     // load coprocessor under test
     conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY,
@@ -110,9 +110,11 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     Connection connection = ConnectionFactory.createConnection(conf);
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = new HTableDescriptor(t.getTableDescriptor());
-    htd.addCoprocessor("net.clayb.hbase.coprocessor.NotWhitelisted",
-      new Path(coprocessorPath),
-      Coprocessor.PRIORITY_USER, null);
+    for (int i=0; i<coprocessorPaths.length; i++) {
+      htd.addCoprocessor("net.clayb.hbase.coprocessor.NotWhitelisted" + i,
+        new Path(coprocessorPaths[i]),
+        Coprocessor.PRIORITY_USER, null);
+    }
     LOG.info("Modifying Table");
     try {
       connection.getAdmin().modifyTable(TEST_TABLE, htd);
@@ -131,11 +133,11 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    *         descriptor successfully
    * @param whitelistedPaths A String array of paths to add in
    *         for the whitelisting configuration
-   * @param coprocessorPath A String to use as the
-   *         path for a mock coprocessor
+   * @param coprocessorPaths A String array of coprocessors to use
+   *         as the paths for mock coprocessors
    */
   private static void negativeTestCase(String[] whitelistedPaths,
-      String coprocessorPath) throws Exception {
+      String[] coprocessorPaths) throws Exception {
     Configuration conf = UTIL.getConfiguration();
     conf.setInt("hbase.client.retries.number", 5);
     // load coprocessor under test
@@ -156,9 +158,11 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     admin.disableTable(TEST_TABLE);
     Table t = connection.getTable(TEST_TABLE);
     HTableDescriptor htd = new HTableDescriptor(t.getTableDescriptor());
-    htd.addCoprocessor("net.clayb.hbase.coprocessor.Whitelisted",
-      new Path(coprocessorPath),
-      Coprocessor.PRIORITY_USER, null);
+    for (int i=0; i<coprocessorPaths.length; i++) {
+      htd.addCoprocessor("net.clayb.hbase.coprocessor.Whitelisted" + i,
+        new Path(coprocessorPaths[i]),
+        Coprocessor.PRIORITY_USER, null);
+    }
     LOG.info("Modifying Table");
     admin.modifyTable(TEST_TABLE, htd);
     assertEquals(1, t.getTableDescriptor().getCoprocessors().size());
@@ -174,7 +178,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testSubstringNonWhitelisted() throws Exception {
     positiveTestCase(new String[]{"/permitted/*"},
-        "file:///notpermitted/couldnotpossiblyexist.jar");
+        new String[]{"file:///notpermitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -187,7 +191,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testDifferentFileSystemNonWhitelisted() throws Exception {
     positiveTestCase(new String[]{"hdfs://foo/bar"},
-        "file:///notpermitted/couldnotpossiblyexist.jar");
+        new String[]{"file:///notpermitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -200,7 +204,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testSchemeAndDirectorywhitelisted() throws Exception {
     negativeTestCase(new String[]{"/tmp","file:///permitted/*"},
-        "file:///permitted/couldnotpossiblyexist.jar");
+        new String[]{"file:///permitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -213,7 +217,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testSchemeWhitelisted() throws Exception {
     negativeTestCase(new String[]{"file:///"},
-        "file:///permitted/couldnotpossiblyexist.jar");
+        new String[]{"file:///permitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -226,7 +230,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testDFSNameWhitelistedWorks() throws Exception {
     negativeTestCase(new String[]{"hdfs://Your-FileSystem"},
-        "hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar");
+        new String[]{"hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -239,7 +243,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testDFSNameNotWhitelistedFails() throws Exception {
     positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
-        "hdfs://My-FileSystem/permitted/couldnotpossiblyexist.jar");
+        new String[]{"hdfs://My-FileSystem/permitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -252,7 +256,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testBlanketWhitelist() throws Exception {
     negativeTestCase(new String[]{"*"},
-        "hdfs:///permitted/couldnotpossiblyexist.jar");
+        new String[]{"hdfs:///permitted/couldnotpossiblyexist.jar"});
   }
 
   /**
