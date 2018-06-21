@@ -404,10 +404,12 @@ public class VerifyReplication extends Configured implements Tool {
     }
 
     String peerQuorumAddress = null;
+    Configuration peerConf = null;
     // accept peerId "-" as only use passed in configs
     if (peerId != "-") {
       Pair<ReplicationPeerConfig, Configuration> peerConfigPair = getPeerQuorumConfig(conf, peerId);
       ReplicationPeerConfig peerConfig = peerConfigPair.getFirst();
+      peerConf = peerConfigPair.getSecond();
       peerQuorumAddress = peerConfig.getClusterKey();
       LOG.info("Peer Quorum Address: " + peerQuorumAddress + ", Peer Configuration: " +
           peerConfig.getConfiguration());
@@ -416,7 +418,7 @@ public class VerifyReplication extends Configured implements Tool {
     } else {
       //Peer cluster ZK quorum
       peerQuorumAddress = this.peerZKQuorum;
-      Configuration peerConf = new Configuration(false);
+      peerConf = new Configuration(false);
       peerConf.set("hbase.zookeeper.quorum", this.peerZKQuorum);
       peerConf.set("hbase.rootdir", this.peerHBaseRootAddress);
       HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX, peerConf);
