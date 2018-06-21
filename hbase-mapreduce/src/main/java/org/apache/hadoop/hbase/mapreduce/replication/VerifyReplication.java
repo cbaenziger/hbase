@@ -419,7 +419,7 @@ public class VerifyReplication extends Configured implements Tool {
       Configuration peerConf = new Configuration(false);
       peerConf.set("hbase.zookeeper.quorum", this.peerZKQuorum);
       peerConf.set("hbase.rootdir", this.peerHBaseRootAddress);
-      HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX, peerConf.entrySet());
+      HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX, peerConf);
     }
 
     conf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
