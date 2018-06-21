@@ -108,6 +108,8 @@ public class VerifyReplication extends Configured implements Tool {
   String peerSnapshotName = null;
   //Temp location in peer cluster to restore peer snapshot
   String peerSnapshotTmpDir = null;
+  //Peer cluster ZK quorum
+  String peerZKQuorum = null;
   //Peer cluster Hadoop FS address
   String peerFSAddress = null;
   //Peer cluster HBase root dir location
@@ -401,9 +403,21 @@ public class VerifyReplication extends Configured implements Tool {
       conf.set(NAME+".rowPrefixes", rowPrefixes);
     }
 
-    Pair<ReplicationPeerConfig, Configuration> peerConfigPair = getPeerQuorumConfig(conf, peerId);
-    ReplicationPeerConfig peerConfig = peerConfigPair.getFirst();
-    String peerQuorumAddress = peerConfig.getClusterKey();
+    // accept peerId "-" as only use passed in configs
+    if (peerId != ""-") {
+      Pair<ReplicationPeerConfig, Configuration> peerConfigPair = getPeerQuorumConfig(conf, peerId);
+      ReplicationPeerConfig peerConfig = peerConfigPair.getFirst();
+      String peerQuorumAddress = peerConfig.getClusterKey();
+      LOG.info("Peer Quorum Address: " + peerQuorumAddress + ", Peer Configuration: " +
+          peerConfig.getConfiguration());
+    } else {
+      //Peer cluster ZK quorum
+      peerConf = new Configuration(conf);
+      String peerQuorumAddress = peerZKQuorum;
+      peerConf.set(NAME + ".peer.hbase.zookeeper.quorum", peerZKQuorum);
+      peerConf.set(NAME + ".peer.hbase.rootdir", peerHBaseRootAddress);
+      peerConf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
+    }
     LOG.info("Peer Quorum Address: " + peerQuorumAddress + ", Peer Configuration: " +
         peerConfig.getConfiguration());
     conf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
@@ -592,6 +606,12 @@ public class VerifyReplication extends Configured implements Tool {
           continue;
         }
 
+        final String peerZKQuorumArgKey = "--peerZKQuorum=";
+        if (cmd.startsWith(peerZKQuorumArgKeyy)) {
+          peerZKQuorum = cmd.substring(peerZKQuorumArgKey.length());
+          continue;
+        }
+        
         final String peerFSAddressArgKey = "--peerFSAddress=";
         if (cmd.startsWith(peerFSAddressArgKey)) {
           peerFSAddress = cmd.substring(peerFSAddressArgKey.length());
@@ -682,6 +702,7 @@ public class VerifyReplication extends Configured implements Tool {
     System.err.println(" peerSnapshotName  Peer Snapshot Name");
     System.err.println(" peerSnapshotTmpDir Tmp location to restore peer table snapshot");
     System.err.println(" peerFSAddress      Peer cluster Hadoop FS address");
+    System.err.println(" peerZKQuorum      Peer cluster Zookeeper quorum");
     System.err.println(" peerHBaseRootAddress  Peer cluster HBase root location");
     System.err.println();
     System.err.println("Args:");
