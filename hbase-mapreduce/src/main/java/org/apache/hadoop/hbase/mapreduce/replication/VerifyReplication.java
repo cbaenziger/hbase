@@ -478,7 +478,7 @@ public class VerifyReplication extends Configured implements Tool {
     } else {
       TableMapReduceUtil.initTableMapperJob(tableName, scan, Verifier.class, null, null, job);
     }
-    Configuration peerClusterConf = peerConfigPair.getSecond();
+    Configuration peerClusterConf = peerConf;
     // Obtain the auth token from peer cluster
     TableMapReduceUtil.initCredentialsForCluster(job, peerClusterConf);
 
