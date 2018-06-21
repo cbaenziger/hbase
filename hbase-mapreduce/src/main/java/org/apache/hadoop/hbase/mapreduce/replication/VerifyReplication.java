@@ -404,7 +404,7 @@ public class VerifyReplication extends Configured implements Tool {
     }
 
     // accept peerId "-" as only use passed in configs
-    if (peerId != ""-") {
+    if (peerId != "-") {
       Pair<ReplicationPeerConfig, Configuration> peerConfigPair = getPeerQuorumConfig(conf, peerId);
       ReplicationPeerConfig peerConfig = peerConfigPair.getFirst();
       String peerQuorumAddress = peerConfig.getClusterKey();
