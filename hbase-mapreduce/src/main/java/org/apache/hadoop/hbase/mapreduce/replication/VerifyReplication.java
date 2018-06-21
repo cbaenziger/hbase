@@ -608,7 +608,7 @@ public class VerifyReplication extends Configured implements Tool {
         }
 
         final String peerZKQuorumArgKey = "--peerZKQuorum=";
-        if (cmd.startsWith(peerZKQuorumArgKeyy)) {
+        if (cmd.startsWith(peerZKQuorumArgKey)) {
           peerZKQuorum = cmd.substring(peerZKQuorumArgKey.length());
           continue;
         }
