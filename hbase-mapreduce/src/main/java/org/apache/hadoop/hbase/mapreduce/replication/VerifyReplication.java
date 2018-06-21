@@ -403,27 +403,26 @@ public class VerifyReplication extends Configured implements Tool {
       conf.set(NAME+".rowPrefixes", rowPrefixes);
     }
 
+    String peerQuorumAddress = null;
     // accept peerId "-" as only use passed in configs
     if (peerId != "-") {
       Pair<ReplicationPeerConfig, Configuration> peerConfigPair = getPeerQuorumConfig(conf, peerId);
       ReplicationPeerConfig peerConfig = peerConfigPair.getFirst();
-      String peerQuorumAddress = peerConfig.getClusterKey();
+      peerQuorumAddress = peerConfig.getClusterKey();
       LOG.info("Peer Quorum Address: " + peerQuorumAddress + ", Peer Configuration: " +
           peerConfig.getConfiguration());
+      HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX,
+          peerConfig.getConfiguration().entrySet());
     } else {
       //Peer cluster ZK quorum
-      peerConf = new Configuration(conf);
-      String peerQuorumAddress = peerZKQuorum;
-      peerConf.set(NAME + ".peer.hbase.zookeeper.quorum", peerZKQuorum);
-      peerConf.set(NAME + ".peer.hbase.rootdir", peerHBaseRootAddress);
-      peerConf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
+      peerQuorumAddress = this.peerZKQuorum;
+      Configuration peerConf = new Configuration(false);
+      peerConf.set("hbase.zookeeper.quorum", this.peerZKQuorum);
+      peerConf.set("hbase.rootdir", this.peerHBaseRootAddress);
+      HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX, peerConf.entrySet());
     }
-    LOG.info("Peer Quorum Address: " + peerQuorumAddress + ", Peer Configuration: " +
-        peerConfig.getConfiguration());
-    conf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
-    HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX,
-        peerConfig.getConfiguration().entrySet());
 
+    conf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
     conf.setInt(NAME + ".versions", versions);
     LOG.info("Number of version: " + versions);
 
