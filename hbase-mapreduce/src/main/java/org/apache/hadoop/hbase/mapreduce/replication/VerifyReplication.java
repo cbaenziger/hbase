@@ -21,6 +21,7 @@ package org.apache.hadoop.hbase.mapreduce.replication;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.UUID;
+import java.io.ByteArrayOutputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
@@ -406,7 +407,7 @@ public class VerifyReplication extends Configured implements Tool {
     String peerQuorumAddress = null;
     Configuration peerConf = null;
     // accept peerId "-" as only use passed in configs
-    if (peerId != "-") {
+    if (false) {
       Pair<ReplicationPeerConfig, Configuration> peerConfigPair = getPeerQuorumConfig(conf, peerId);
       ReplicationPeerConfig peerConfig = peerConfigPair.getFirst();
       peerConf = peerConfigPair.getSecond();
@@ -420,12 +421,20 @@ public class VerifyReplication extends Configured implements Tool {
       peerQuorumAddress = this.peerZKQuorum;
       peerConf = new Configuration(false);
       peerConf.set("hbase.zookeeper.quorum", this.peerZKQuorum);
-      peerConf.set("hbase.rootdir", this.peerHBaseRootAddress);
-      HBaseConfiguration.setWithPrefix(conf, PEER_CONFIG_PREFIX, peerConf);
+      peerConf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
+      peerConf.set(NAME + ".hbase.zookeeper.quorum", this.peerZKQuorum);
+      ByteArrayOutputStream byteArray = new ByteArrayOutputStream();
+      peerConf.writeXml(byteArray);
+      LOG.info("Peer Quorum Address: " + peerQuorumAddress + ", Peer Configuration: " +
+          byteArray.toString());
     }
 
     conf.set(NAME + ".peerQuorumAddress", peerQuorumAddress);
     conf.setInt(NAME + ".versions", versions);
+    ByteArrayOutputStream byteArray = new ByteArrayOutputStream();
+    conf.writeXml(byteArray);
+    LOG.info("Local Quorum Address: " + peerConf.get("hbase.zookeeper.quorum") + ", Local Configuration: " +
+        byteArray.toString());
     LOG.info("Number of version: " + versions);
 
     //Set Snapshot specific parameters
