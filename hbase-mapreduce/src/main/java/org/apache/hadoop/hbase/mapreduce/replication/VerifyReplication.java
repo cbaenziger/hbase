@@ -433,7 +433,7 @@ public class VerifyReplication extends Configured implements Tool {
     conf.setInt(NAME + ".versions", versions);
     ByteArrayOutputStream byteArray = new ByteArrayOutputStream();
     conf.writeXml(byteArray);
-    LOG.info("Local Quorum Address: " + peerConf.get("hbase.zookeeper.quorum") + ", Local Configuration: " +
+    LOG.info("Local Quorum Address: " + conf.get("hbase.zookeeper.quorum") + ", Local Configuration: " +
         byteArray.toString());
     LOG.info("Number of version: " + versions);
 
