@@ -22,6 +22,19 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.UUID;
 import java.io.ByteArrayOutputStream;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.security.token.AuthenticationTokenIdentifier;
+import org.apache.hadoop.security.token.TokenIdentifier;
+import org.apache.hadoop.hbase.security.token.TokenUtil;
+import org.apache.hadoop.security.token.Token;
+import java.nio.charset.StandardCharsets;
+import java.lang.String;
+import org.apache.hadoop.hbase.security.User;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
@@ -132,6 +145,26 @@ public class VerifyReplication extends Configured implements Tool {
     private boolean verbose = false;
     private int batch = -1;
 
+
+    public static void initCredentials(JobConf job) throws IOException {
+      // propagate delegation related props from launcher job to MR job
+      if (System.getenv("HADOOP_TOKEN_FILE_LOCATION") != null) {
+        job.set("mapreduce.job.credentials.binary", System.getenv("HADOOP_TOKEN_FILE_LOCATION"));
+      }
+     
+      Connection conn = ConnectionFactory.createConnection(job);
+      try {
+        // login the server principal (if using secure Hadoop)
+        TokenUtil.addTokenForJob(conn, job, User.getCurrent());
+      } catch (InterruptedException ie) {
+        ie.printStackTrace();
+        Thread.currentThread().interrupt();
+      } finally {
+        conn.close();
+      }
+    }
+
+
     /**
      * Map method that compares every scanned row with the equivalent from
      * a distant cluster.
@@ -144,8 +177,16 @@ public class VerifyReplication extends Configured implements Tool {
     public void map(ImmutableBytesWritable row, final Result value,
                     Context context)
         throws IOException {
+      LOG.info("XXX In mapper");
       if (replicatedScanner == null) {
         Configuration conf = context.getConfiguration();
+
+        conf.set("hadoop.security.authentication", "Kerberos");
+        conf.set("hbase.security.authorization", "true");
+        conf.set("hbase.security.authentication", "Kerberos");
+        conf.set("hbase.master.kerberos.principal", "hbase/_HOST@ADDEV.BLOOMBERG.COM");
+        conf.set("hbase.regionserver.kerberos.principal", "hbase/_HOST@ADDEV.BLOOMBERG.COM");
+
         sleepMsBeforeReCompare = conf.getInt(NAME +".sleepMsBeforeReCompare", 0);
         delimiter = conf.get(NAME + ".delimiter", "");
         verbose = conf.getBoolean(NAME +".verbose", false);
@@ -176,6 +217,7 @@ public class VerifyReplication extends Configured implements Tool {
           scan.setMaxVersions(versions);
         }
         TableName tableName = TableName.valueOf(conf.get(NAME + ".tableName"));
+
         sourceConnection = ConnectionFactory.createConnection(conf);
         sourceTable = sourceConnection.getTable(tableName);
 
@@ -320,6 +362,7 @@ public class VerifyReplication extends Configured implements Tool {
     if (!doCommandLine(args)) {
       return null;
     }
+    LOG.info("XXX in submission0");
     conf.set(NAME+".peerId", peerId);
     conf.set(NAME+".tableName", tableName);
     conf.setLong(NAME+".startTime", startTime);
@@ -377,6 +420,8 @@ public class VerifyReplication extends Configured implements Tool {
     Job job = Job.getInstance(conf, conf.get(JOB_NAME_CONF_KEY, NAME + "_" + tableName));
     job.setJarByClass(VerifyReplication.class);
 
+    //initCredentials(job);
+
     Scan scan = new Scan();
     scan.setTimeRange(startTime, endTime);
     scan.setRaw(includeDeletedCells);
@@ -397,10 +442,17 @@ public class VerifyReplication extends Configured implements Tool {
 
     setRowPrefixFilter(scan, rowPrefixes);
 
+    LOG.info("XXX in submission1");
+    UserGroupInformation.setConfiguration(conf);
+    UserGroupInformation.setConfiguration(peerConf);
+    LOG.info("XXX in submission2");
     TableMapReduceUtil.initTableMapperJob(tableName, scan, Verifier.class, null, null, job);
-    Configuration peerClusterConf = peerConf;
+    LOG.info("XXX in submission3");
     // Obtain the auth token from peer cluster
-    TableMapReduceUtil.initCredentialsForCluster(job, peerClusterConf);
+    TableMapReduceUtil.initCredentialsForCluster(job, conf);
+    LOG.info("XXX in submission4");
+    TableMapReduceUtil.initCredentialsForCluster(job, peerConf);
+    LOG.info("XXX in submission5");
 
     job.setOutputFormatClass(NullOutputFormat.class);
     job.setNumReduceTasks(0);
@@ -639,6 +691,7 @@ public class VerifyReplication extends Configured implements Tool {
   @Override
   public int run(String[] args) throws Exception {
     Configuration conf = this.getConf();
+    System.err.println("XXX Should see this!");
     Job job = createSubmittableJob(conf, args);
     if (job != null) {
       return job.waitForCompletion(true) ? 0 : 1;
