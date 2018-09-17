@@ -20,8 +20,11 @@ package org.apache.hadoop.hbase.security.access;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.io.IOException;
 import java.util.Optional;
+import java.util.Arrays;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -42,12 +45,16 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.testclassification.LargeTests;
 import org.apache.hadoop.hbase.testclassification.SecurityTests;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.Version;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.log4j.Level;
 
 /**
  * Performs coprocessor loads for various paths and malformed strings
@@ -65,6 +72,28 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   private static final TableName TEST_TABLE = TableName.valueOf("testTable");
   private static final byte[] TEST_FAMILY = Bytes.toBytes("fam1");
 
+  @Before
+  public void setUp() {
+    org.apache.log4j.Logger.getLogger(CoprocessorWhitelistMasterObserver.class).setLevel(Level.TRACE);
+    org.apache.log4j.Logger.getLogger("org.apache.hbase.server").setLevel(Level.TRACE);
+  }
+
+  public static void uploadCoprocessorWhitelistMasterObserver() {
+    try {
+      UTIL.getTestFileSystem().mkdirs(new Path("permitted"));
+      UTIL.getTestFileSystem().copyFromLocalFile(false, true,
+        new Path(new Path(new URI(Version.url).getPath().toString()),
+        "hbase-server/target/test-classes/org/apache/hadoop/hbase/coprocessor/SimpleRegionObserver.class"),
+        new Path(UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class"));
+      UTIL.getTestFileSystem().copyFromLocalFile(false, true,
+        new Path(new Path(new URI(Version.url).getPath().toString()),
+        "hbase-server/target/test-classes/org/apache/hadoop/hbase/coprocessor/SimpleRegionObserver.class"),
+        new Path(UTIL.getTestFileSystem().getUri().toString() + "/permitted2/SimpleRegionObserver.class"));
+    } catch (IOException|URISyntaxException ex) {
+      fail("Setup failed with " + ex.toString());
+    }
+  }
+
   @After
   public void tearDownTestCoprocessorWhitelistMasterObserver() throws Exception {
     Admin admin = UTIL.getAdmin();
@@ -80,12 +109,13 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
       // Table was not created for some reason?
       LOG.info("Table was not created for some reason");
     }
+    UTIL.shutdownMiniDFSCluster();
     UTIL.shutdownMiniCluster();
   }
 
   /**
    * Test a table modification adding a coprocessor path
-   * which is not whitelisted
+   * which is not whitelisted gets caught
    * @result An IOException should be thrown and caught
    *         to show coprocessor is working as desired
    * @param whitelistedPaths A String array of paths to add in
@@ -105,6 +135,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     // set retries low to raise exception quickly
     conf.setInt("hbase.client.retries.number", 5);
     UTIL.startMiniCluster();
+    uploadCoprocessorWhitelistMasterObserver();
     UTIL.createTable(TEST_TABLE, new byte[][] { TEST_FAMILY });
     UTIL.waitUntilAllRegionsAssigned(TEST_TABLE);
     Connection connection = ConnectionFactory.createConnection(conf);
@@ -129,7 +160,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
 
   /**
    * Test a table modification adding a coprocessor path
-   * which is whitelisted
+   * which is whitelisted is permitted
    * @result The coprocessor should be added to the table
    *         descriptor successfully
    * @param whitelistedPaths A String array of paths to add in
@@ -149,7 +180,12 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     conf.setStrings(
         CoprocessorWhitelistMasterObserver.CP_COPROCESSOR_WHITELIST_PATHS_KEY,
         whitelistedPaths);
+    conf.setInt("dfs.replication", 3);
+    conf.setInt("dfs.namenode.replication.min", 3);
+    UTIL.startMiniDFSCluster(null);
+    UTIL.createRootDir();
     UTIL.startMiniCluster();
+    uploadCoprocessorWhitelistMasterObserver();
     UTIL.createTable(TEST_TABLE, new byte[][] { TEST_FAMILY });
     UTIL.waitUntilAllRegionsAssigned(TEST_TABLE);
     Connection connection = ConnectionFactory.createConnection(conf);
@@ -167,7 +203,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
     }
     LOG.info("Modifying Table");
     admin.modifyTable(TEST_TABLE, htd);
-    assertEquals(1, t.getTableDescriptor().getCoprocessors().size());
+    assertEquals(coprocessorPaths.length, t.getTableDescriptor().getCoprocessors().size());
     LOG.info("Done Modifying Table");
   }
 
@@ -204,8 +240,10 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testSchemeAndDirectorywhitelisted() throws Exception {
-    negativeTestCase(new String[]{"/tmp","file:///permitted/*"},
-        new String[]{"file:///permitted/couldnotpossiblyexist.jar"});
+    String permittedPath = new Path(new Path(new URI(Version.url).getPath().toString()),
+      "hbase-server/target/test-classes/org/apache/hadoop/hbase/coprocessor").toString();
+    negativeTestCase(new String[]{"/tmp","file:///" + permittedPath + "/*"},
+        new String[]{"file://"+ permittedPath + "/SimpleRegionObserver.class"});
   }
 
   /**
@@ -217,8 +255,10 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testSchemeWhitelisted() throws Exception {
+    String permittedPath = new Path(new Path(new URI(Version.url).getPath().toString()),
+      "hbase-server/target/test-classes/org/apache/hadoop/hbase/coprocessor/SimpleRegionObserver.class").toString();
     negativeTestCase(new String[]{"file:///"},
-        new String[]{"file:///permitted/couldnotpossiblyexist.jar"});
+        new String[]{"file:///" + permittedPath});
   }
 
   /**
@@ -230,8 +270,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testDFSNameWhitelistedWorks() throws Exception {
-    negativeTestCase(new String[]{"hdfs://Your-FileSystem"},
-        new String[]{"hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar"});
+    negativeTestCase(new String[]{UTIL.getTestFileSystem().getUri().toString()},
+        new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class"});
   }
 
   /**
@@ -242,8 +282,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testDFSNameNotWhitelistedFails() throws Exception {
-    positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
-        new String[]{"hdfs://My-FileSystem/permitted/couldnotpossiblyexist.jar"});
+    positiveTestCase(new String[]{UTIL.getTestFileSystem().getUri().toString()},
+        new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class"});
   }
 
   /**
@@ -256,7 +296,7 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testBlanketWhitelist() throws Exception {
     negativeTestCase(new String[]{"*"},
-        new String[]{"hdfs:///permitted/couldnotpossiblyexist.jar"});
+        new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class"});
   }
 
   /**
@@ -267,9 +307,9 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testMultiplePathsFirstAllowedSecondDisallowed() throws Exception {
-    positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
-        new String[]{"hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar",
-                     "hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist.jar"});
+    positiveTestCase(new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/*"},
+        new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class",
+                     UTIL.getTestFileSystem().getUri().toString() + "/notPermitted/couldnotpossiblyexist.jar"});
   }
 
   /**
@@ -280,9 +320,9 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testMultiplePathsSecondAllowedFirstDisallowed() throws Exception {
-    positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
-        new String[]{"hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist.jar",
-                     "hdfs://Your-FileSystem/permitted/couldnotpossiblyexist.jar"});
+    positiveTestCase(new String[]{UTIL.getTestFileSystem().getUri().toString()},
+        new String[]{"hdfs://Your-FileSystem/notPermitted/couldnotpossiblyexist.jar",
+                     UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class"});
   }
 
   /**
@@ -294,9 +334,9 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
    */
   @Test
   public void testTwoPathsAllAllowed() throws Exception {
-    positiveTestCase(new String[]{"hdfs://My-FileSystem"},
-        new String[]{"hdfs://My-FileSystem/permitted/couldnotpossiblyexist1.jar",
-                     "hdfs://My-FileSystem/permitted/couldnotpossiblyexist2.jar"});
+    negativeTestCase(new String[]{UTIL.getTestFileSystem().getUri().toString()},
+        new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class",
+                     UTIL.getTestFileSystem().getUri().toString() + "/permitted2/SimpleRegionObserver.class"});
   }
 
   /**
@@ -308,8 +348,8 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
   @Test
   public void testTwoPathsAllDisallowed() throws Exception {
     positiveTestCase(new String[]{"hdfs://Your-FileSystem"},
-        new String[]{"hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist1.jar",
-                     "hdfs://My-FileSystem/notPermitted/couldnotpossiblyexist2.jar"});
+        new String[]{UTIL.getTestFileSystem().getUri().toString() + "/permitted/SimpleRegionObserver.class",
+                     UTIL.getTestFileSystem().getUri().toString() + "/permitted2/SimpleRegionObserver2.class"});
   }
 
   /**
@@ -327,6 +367,10 @@ public class TestCoprocessorWhitelistMasterObserver extends SecureTestUtil {
         new String[]{});
     // set retries low to raise exception quickly
     conf.setInt("hbase.client.retries.number", 5);
+    conf.setInt("dfs.replication", 3);
+    conf.setInt("dfs.namenode.replication.min", 3);
+    UTIL.startMiniDFSCluster(null);
+    UTIL.createRootDir();
     UTIL.startMiniCluster();
     HTableDescriptor htd = new HTableDescriptor(TEST_TABLE);
     HColumnDescriptor hcd = new HColumnDescriptor(TEST_FAMILY);
