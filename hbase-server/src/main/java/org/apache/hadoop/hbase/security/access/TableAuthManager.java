@@ -27,6 +27,7 @@ import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -334,6 +335,7 @@ public class TableAuthManager implements Closeable {
   }
 
   private boolean authorize(List<TablePermission> perms,
+		                    InetAddress hostSpec,
                             TableName table, byte[] family,
                             byte[] qualifier, Permission.Action action) {
     if (perms != null) {
@@ -348,7 +350,7 @@ public class TableAuthManager implements Closeable {
     return false;
   }
 
-  private boolean hasAccess(List<TablePermission> perms,
+  private boolean hasAccess(List<TablePermission> perms, InetAddress hostSpec,
                             TableName table, Permission.Action action) {
     if (perms != null) {
       for (TablePermission p : perms) {
@@ -365,7 +367,7 @@ public class TableAuthManager implements Closeable {
   /**
    * Authorize a user for a given KV. This is called from AccessControlFilter.
    */
-  public boolean authorize(User user, TableName table, Cell cell, Permission.Action action) {
+  public boolean authorize(User user, InetAddress hostSpec, TableName table, Cell cell, Permission.Action action) {
     try {
       List<Permission> perms = AccessControlLists.getCellPermissionsForUser(user, cell);
       if (LOG.isTraceEnabled()) {
@@ -388,7 +390,7 @@ public class TableAuthManager implements Closeable {
     return false;
   }
 
-  public boolean authorize(User user, String namespace, Permission.Action action) {
+  public boolean authorize(User user, InetAddress hostSpec, String namespace, Permission.Action action) {
     // Global authorizations supercede namespace level
     if (authorize(user, action)) {
       return true;
@@ -397,14 +399,14 @@ public class TableAuthManager implements Closeable {
     PermissionCache<TablePermission> tablePerms = nsCache.get(namespace);
     if (tablePerms != null) {
       List<TablePermission> userPerms = tablePerms.getUser(user.getShortName());
-      if (authorize(userPerms, namespace, action)) {
+      if (authorize(userPerms, hostSpec, namespace, action)) {
         return true;
       }
       String[] groupNames = user.getGroupNames();
       if (groupNames != null) {
         for (String group : groupNames) {
           List<TablePermission> groupPerms = tablePerms.getGroup(group);
-          if (authorize(groupPerms, namespace, action)) {
+          if (authorize(groupPerms, hostSpec, namespace, action)) {
             return true;
           }
         }
@@ -413,8 +415,8 @@ public class TableAuthManager implements Closeable {
     return false;
   }
 
-  private boolean authorize(List<TablePermission> perms, String namespace,
-                            Permission.Action action) {
+  private boolean authorize(List<TablePermission> perms, InetAddress hostSpec, 
+		                    String namespace, Permission.Action action) {
     if (perms != null) {
       for (TablePermission p : perms) {
         if (p.implies(namespace, action)) {
@@ -438,20 +440,20 @@ public class TableAuthManager implements Closeable {
    * @param action
    * @return true if known and authorized, false otherwise
    */
-  public boolean authorizeUser(User user, TableName table, byte[] family,
+  public boolean authorizeUser(User user, InetAddress hostSpec, TableName table, byte[] family,
       Permission.Action action) {
-    return authorizeUser(user, table, family, null, action);
+    return authorizeUser(user, hostSpec, table, family, null, action);
   }
 
-  public boolean authorizeUser(User user, TableName table, byte[] family,
+  public boolean authorizeUser(User user, InetAddress hostSpec, TableName table, byte[] family,
       byte[] qualifier, Permission.Action action) {
     if (table == null) table = AccessControlLists.ACL_TABLE_NAME;
     // Global and namespace authorizations supercede table level
-    if (authorize(user, table.getNamespaceAsString(), action)) {
+    if (authorize(user, hostSpec, table.getNamespaceAsString(), action)) {
       return true;
     }
     // Check table permissions
-    return authorize(getTablePermissions(table).getUser(user.getShortName()), table, family,
+    return authorize(getTablePermissions(table).getUser(user.getShortName()), hostSpec, table, family,
         qualifier, action);
   }
 
@@ -464,21 +466,21 @@ public class TableAuthManager implements Closeable {
    * @param action
    * @return true if the user has access to the table, false otherwise
    */
-  public boolean userHasAccess(User user, TableName table, Permission.Action action) {
+  public boolean userHasAccess(User user, InetAddress hostSpec, TableName table, Permission.Action action) {
     if (table == null) table = AccessControlLists.ACL_TABLE_NAME;
     // Global and namespace authorizations supercede table level
-    if (authorize(user, table.getNamespaceAsString(), action)) {
+    if (authorize(user, hostSpec, table.getNamespaceAsString(), action)) {
       return true;
     }
     // Check table permissions
-    return hasAccess(getTablePermissions(table).getUser(user.getShortName()), table, action);
+    return hasAccess(getTablePermissions(table).getUser(user.getShortName()), hostSpec, table, action);
   }
 
   /**
    * Checks global authorization for a given action for a group, based on the stored
    * permissions.
    */
-  public boolean authorizeGroup(String groupName, Permission.Action action) {
+  public boolean authorizeGroup(String groupName, InetAddress hostSpec, Permission.Action action) {
     List<Permission> perms = globalCache.getGroup(groupName);
     if (LOG.isDebugEnabled()) {
       LOG.debug("authorizing " + (perms != null && !perms.isEmpty() ? perms.get(0) : "") +
@@ -497,16 +499,16 @@ public class TableAuthManager implements Closeable {
    * @param action
    * @return true if known and authorized, false otherwise
    */
-  public boolean authorizeGroup(String groupName, TableName table, byte[] family,
+  public boolean authorizeGroup(String groupName, InetAddress hostSpec, TableName table, byte[] family,
       byte[] qualifier, Permission.Action action) {
     // Global authorization supercedes table level
-    if (authorizeGroup(groupName, action)) {
+    if (authorizeGroup(groupName, hostSpec, action)) {
       return true;
     }
     if (table == null) table = AccessControlLists.ACL_TABLE_NAME;
     // Namespace authorization supercedes table level
     String namespace = table.getNamespaceAsString();
-    if (authorize(getNamespacePermissions(namespace).getGroup(groupName), namespace, action)) {
+    if (authorize(getNamespacePermissions(namespace).getGroup(groupName), hostSpec, namespace, action)) {
       return true;
     }
     // Check table level
@@ -516,7 +518,7 @@ public class TableAuthManager implements Closeable {
         " for " +groupName + " on " + table + "." + Bytes.toString(family) + "." +
         Bytes.toString(qualifier) + " with " + action);
     }
-    return authorize(tblPerms, table, family, qualifier, action);
+    return authorize(tblPerms, hostSpec, table, family, qualifier, action);
   }
 
   /**
@@ -527,31 +529,31 @@ public class TableAuthManager implements Closeable {
    * @param action
    * @return true if the group has access to the table, false otherwise
    */
-  public boolean groupHasAccess(String groupName, TableName table, Permission.Action action) {
+  public boolean groupHasAccess(String groupName, InetAddress hostSpec, TableName table, Permission.Action action) {
     // Global authorization supercedes table level
-    if (authorizeGroup(groupName, action)) {
+    if (authorizeGroup(groupName, hostSpec, action)) {
       return true;
     }
     if (table == null) table = AccessControlLists.ACL_TABLE_NAME;
     // Namespace authorization supercedes table level
     if (hasAccess(getNamespacePermissions(table.getNamespaceAsString()).getGroup(groupName),
-        table, action)) {
+         hostSpec, table, action)) {
       return true;
     }
     // Check table level
-    return hasAccess(getTablePermissions(table).getGroup(groupName), table, action);
+    return hasAccess(getTablePermissions(table).getGroup(groupName), hostSpec, table, action);
   }
 
-  public boolean authorize(User user, TableName table, byte[] family,
+  public boolean authorize(User user, InetAddress hostSpec, TableName table, byte[] family,
       byte[] qualifier, Permission.Action action) {
-    if (authorizeUser(user, table, family, qualifier, action)) {
+    if (authorizeUser(user, hostSpec, table, family, qualifier, action)) {
       return true;
     }
 
     String[] groups = user.getGroupNames();
     if (groups != null) {
       for (String group : groups) {
-        if (authorizeGroup(group, table, family, qualifier, action)) {
+        if (authorizeGroup(group, hostSpec, table, family, qualifier, action)) {
           return true;
         }
       }
@@ -559,15 +561,15 @@ public class TableAuthManager implements Closeable {
     return false;
   }
 
-  public boolean hasAccess(User user, TableName table, Permission.Action action) {
-    if (userHasAccess(user, table, action)) {
+  public boolean hasAccess(User user, InetAddress hostSpec, TableName table, Permission.Action action) {
+    if (userHasAccess(user, hostSpec, table, action)) {
       return true;
     }
 
     String[] groups = user.getGroupNames();
     if (groups != null) {
       for (String group : groups) {
-        if (groupHasAccess(group, table, action)) {
+        if (groupHasAccess(group, hostSpec, table, action)) {
           return true;
         }
       }
@@ -575,9 +577,9 @@ public class TableAuthManager implements Closeable {
     return false;
   }
 
-  public boolean authorize(User user, TableName table, byte[] family,
+  public boolean authorize(User user, InetAddress hostSpec, TableName table, byte[] family,
       Permission.Action action) {
-    return authorize(user, table, family, null, action);
+    return authorize(user, hostSpec, table, family, null, action);
   }
 
   /**
