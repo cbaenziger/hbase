@@ -124,15 +124,15 @@ class AccessControlFilter extends FilterBase {
     switch (strategy) {
       // Filter only by checking the table or CF permissions
       case CHECK_TABLE_AND_CF_ONLY: {
-        if (authManager.authorize(user, table, family, qualifier, Permission.Action.READ)) {
+        if (authManager.authorize(user, hostSpec, table, family, qualifier, Permission.Action.READ)) {
           return ReturnCode.INCLUDE;
         }
       }
       break;
       // Cell permissions can override table or CF permissions
       case CHECK_CELL_DEFAULT: {
-        if (authManager.authorize(user, table, family, qualifier, Permission.Action.READ) ||
-            authManager.authorize(user, table, cell, Permission.Action.READ)) {
+        if (authManager.authorize(user, hostSpec, table, family, qualifier, Permission.Action.READ) ||
+            authManager.authorize(user, hostSpec, table, cell, Permission.Action.READ)) {
           return ReturnCode.INCLUDE;
         }
       }

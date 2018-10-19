@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.yetus.audience.InterfaceAudience;
 import org.apache.yetus.audience.InterfaceStability;
 
+import java.net.InetAddress;
 import java.util.Optional;
 
 /**
@@ -77,4 +78,12 @@ public interface ObserverContext<E extends CoprocessorEnvironment> {
    * context.
    */
   Optional<User> getCaller();
+
+  /**
+   * Returns the requesting host for the coprocessor call. If an explicit {@code InetAddress} instance was
+   * provided to the constructor, that will be returned, otherwise if we are in the context of an
+   * RPC call, the remote user is used. May not be present if the execution is outside of an RPC
+   * context.
+   */
+  Optional<InetAddress> getRemoteAddress();
 }

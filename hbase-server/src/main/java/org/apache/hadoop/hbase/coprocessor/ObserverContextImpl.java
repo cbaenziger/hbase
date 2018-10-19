@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hbase.coprocessor;
 
+import java.net.InetAddress;
 import java.util.Optional;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcServer;
@@ -38,13 +39,15 @@ public class ObserverContextImpl<E extends CoprocessorEnvironment> implements Ob
    */
   private final boolean bypassable;
   private final User caller;
+  private final InetAddress hostSpec;
 
-  public ObserverContextImpl(User caller) {
-    this(caller, false);
+  public ObserverContextImpl(User caller, InetAddress hostSpec) {
+    this(caller, hostSpec,false);
   }
 
-  public ObserverContextImpl(User caller, boolean bypassable) {
+  public ObserverContextImpl(User caller, InetAddress hostSpec, boolean bypassable) {
     this.caller = caller;
+    this.hostSpec = hostSpec;
     this.bypassable = bypassable;
   }
 
@@ -89,6 +92,12 @@ public class ObserverContextImpl<E extends CoprocessorEnvironment> implements Ob
     return Optional.ofNullable(caller);
   }
 
+
+  @Override
+  public Optional<InetAddress> getRemoteAddress() {
+    return Optional.ofNullable(caller);
+  }
+
   /**
    * Instantiates a new ObserverContext instance if the passed reference is <code>null</code> and
    * sets the environment in the new or existing instance. This allows deferring the instantiation
@@ -100,8 +109,9 @@ public class ObserverContextImpl<E extends CoprocessorEnvironment> implements Ob
   @Deprecated
   @VisibleForTesting
   // TODO: Remove this method, ObserverContext should not depend on RpcServer
+  // XXX TODO: Understand Gary's about RpcServer comment from HBASE-16217 Pass through the calling user in ObserverContext above
   public static <E extends CoprocessorEnvironment> ObserverContext<E> createAndPrepare(E env) {
-    ObserverContextImpl<E> ctx = new ObserverContextImpl<>(RpcServer.getRequestUser().orElse(null));
+    ObserverContextImpl<E> ctx = new ObserverContextImpl<>(RpcServer.getRequestUser().orElse(null), RpcServer.getRemoteAddress());
     ctx.prepare(env);
     return ctx;
   }

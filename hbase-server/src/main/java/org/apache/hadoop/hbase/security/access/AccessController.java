@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.net.InetAddress;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +97,7 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.hfile.HFile;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils;
 import org.apache.hadoop.hbase.ipc.RpcServer;
+import org.apache.hadoop.hbase.net.Address;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.AccessControlService;
@@ -287,7 +289,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       for (byte[] entry : entries) {
         currentEntry = entry;
         ListMultimap<String, TablePermission> perms =
-            AccessControlLists.getPermissions(conf, entry, t, null, null, null, false);
+            AccessControlLists.getPermissions(conf, entry, t, null, null, null, false, false);
         byte[] serialized = AccessControlLists.writePermissionsAsBytes(perms, conf);
         zkw.writeToZookeeper(entry, serialized);
       }
@@ -306,32 +308,33 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
    * </p>
    * @param request User request
    * @param user User name
+   * @param hostSpec host specification of the client
    * @param permRequest the action being requested
    * @param e the coprocessor environment
    * @param tableName Table name
    * @param families the map of column families to qualifiers present in the request
    * @return an authorization result
    */
-  private AuthResult permissionGranted(String request, User user, Action permRequest,
+  private AuthResult permissionGranted(String request, User user, InetAddress hostSpec, Action permRequest,
       RegionCoprocessorEnvironment e, TableName tableName,
       Map<byte[], ? extends Collection<?>> families) {
     // 1. All users need read access to hbase:meta table.
     // this is a very common operation, so deal with it quickly.
     if (TableName.META_TABLE_NAME.equals(tableName)) {
       if (permRequest == Action.READ) {
-        return AuthResult.allow(request, "All users allowed", user, permRequest, tableName,
+        return AuthResult.allow(request, "All users allowed", user, hostSpec, permRequest, tableName,
           families);
       }
     }
 
     if (user == null) {
-      return AuthResult.deny(request, "No user associated with request!", null,
+      return AuthResult.deny(request, "No user associated with request!", null, hostSpec,
         permRequest, tableName, families);
     }
 
     // 2. check for the table-level, if successful we can short-circuit
-    if (getAuthManager().authorize(user, tableName, (byte[])null, permRequest)) {
-      return AuthResult.allow(request, "Table permission granted", user,
+    if (getAuthManager().authorize(user, hostSpec, tableName, (byte[])null, permRequest)) {
+      return AuthResult.allow(request, "Table permission granted", user, hostSpec,
         permRequest, tableName, families);
     }
 
@@ -340,7 +343,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       // all families must pass
       for (Map.Entry<byte [], ? extends Collection<?>> family : families.entrySet()) {
         // a) check for family level access
-        if (getAuthManager().authorize(user, tableName, family.getKey(),
+        if (getAuthManager().authorize(user, hostSpec, tableName, family.getKey(),
             permRequest)) {
           continue;  // family-level permission overrides per-qualifier
         }
@@ -351,37 +354,37 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
             // for each qualifier of the family
             Set<byte[]> familySet = (Set<byte[]>)family.getValue();
             for (byte[] qualifier : familySet) {
-              if (!getAuthManager().authorize(user, tableName, family.getKey(),
+              if (!getAuthManager().authorize(user, hostSpec, tableName, family.getKey(),
                                          qualifier, permRequest)) {
-                return AuthResult.deny(request, "Failed qualifier check", user,
+                return AuthResult.deny(request, "Failed qualifier check", user, hostSpec,
                     permRequest, tableName, makeFamilyMap(family.getKey(), qualifier));
               }
             }
           } else if (family.getValue() instanceof List) { // List<Cell>
             List<Cell> cellList = (List<Cell>)family.getValue();
             for (Cell cell : cellList) {
-              if (!getAuthManager().authorize(user, tableName, family.getKey(),
+              if (!getAuthManager().authorize(user, hostSpec, tableName, family.getKey(),
                 CellUtil.cloneQualifier(cell), permRequest)) {
-                return AuthResult.deny(request, "Failed qualifier check", user, permRequest,
-                  tableName, makeFamilyMap(family.getKey(), CellUtil.cloneQualifier(cell)));
+                return AuthResult.deny(request, "Failed qualifier check", user, hostSpec, 
+                    permRequest, tableName, makeFamilyMap(family.getKey(), CellUtil.cloneQualifier(cell)));
               }
             }
           }
         } else {
           // no qualifiers and family-level check already failed
-          return AuthResult.deny(request, "Failed family check", user, permRequest,
+          return AuthResult.deny(request, "Failed family check", user, hostSpec, permRequest,
               tableName, makeFamilyMap(family.getKey(), null));
         }
       }
 
       // all family checks passed
-      return AuthResult.allow(request, "All family checks passed", user, permRequest,
+      return AuthResult.allow(request, "All family checks passed", user, hostSpec, permRequest,
           tableName, families);
     }
 
     // 4. no families to check and table level access failed
     return AuthResult.deny(request, "No families to check and table permission failed",
-        user, permRequest, tableName, families);
+        user, hostSpec, permRequest, tableName, families);
   }
 
   /**
@@ -389,17 +392,18 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
    * against the given set of row data.
    * @param opType the operation type
    * @param user the user
+   * @param hostSpec the remote client host specification
    * @param e the coprocessor environment
    * @param families the map of column families to qualifiers present in
    * the request
    * @param actions the desired actions
    * @return an authorization result
    */
-  private AuthResult permissionGranted(OpType opType, User user, RegionCoprocessorEnvironment e,
+  private AuthResult permissionGranted(OpType opType, User user, InetAddress hostSpec, RegionCoprocessorEnvironment e,
       Map<byte [], ? extends Collection<?>> families, Action... actions) {
     AuthResult result = null;
     for (Action action: actions) {
-      result = permissionGranted(opType.toString(), user, action, e,
+      result = permissionGranted(opType.toString(), user, hostSpec, action, e,
         e.getRegion().getRegionInfo().getTable(), families);
       if (!result.isAllowed()) {
         return result;
@@ -410,58 +414,58 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
 
   public void requireAccess(ObserverContext<?> ctx, String request, TableName tableName,
       Action... permissions) throws IOException {
-    accessChecker.requireAccess(getActiveUser(ctx), request, tableName, permissions);
+    accessChecker.requireAccess(getActiveUser(ctx), getActiveHost(ctx), request, tableName, permissions);
   }
 
   public void requirePermission(ObserverContext<?> ctx, String request,
       Action perm) throws IOException {
-    accessChecker.requirePermission(getActiveUser(ctx), request, null, perm);
+    accessChecker.requirePermission(getActiveUser(ctx), getActiveHost(ctx), request, null, perm);
   }
 
   public void requireGlobalPermission(ObserverContext<?> ctx, String request,
       Action perm, TableName tableName,
       Map<byte[], ? extends Collection<byte[]>> familyMap) throws IOException {
-    accessChecker.requireGlobalPermission(getActiveUser(ctx), request, perm, tableName, familyMap,
+    accessChecker.requireGlobalPermission(getActiveUser(ctx), getActiveHost(ctx), request, perm, tableName, familyMap,
       null);
   }
 
   public void requireGlobalPermission(ObserverContext<?> ctx, String request,
       Action perm, String namespace) throws IOException {
-    accessChecker.requireGlobalPermission(getActiveUser(ctx),
+    accessChecker.requireGlobalPermission(getActiveUser(ctx), getActiveHost(ctx),
         request, perm, namespace);
   }
 
   public void requireNamespacePermission(ObserverContext<?> ctx, String request, String namespace,
       Action... permissions) throws IOException {
-    accessChecker.requireNamespacePermission(getActiveUser(ctx),
+    accessChecker.requireNamespacePermission(getActiveUser(ctx), getActiveHost(ctx),
         request, namespace, null, permissions);
   }
 
   public void requireNamespacePermission(ObserverContext<?> ctx, String request, String namespace,
       TableName tableName, Map<byte[], ? extends Collection<byte[]>> familyMap,
       Action... permissions) throws IOException {
-    accessChecker.requireNamespacePermission(getActiveUser(ctx),
+    accessChecker.requireNamespacePermission(getActiveUser(ctx), getActiveHost(ctx),
         request, namespace, tableName, familyMap,
         permissions);
   }
 
   public void requirePermission(ObserverContext<?> ctx, String request, TableName tableName,
       byte[] family, byte[] qualifier, Action... permissions) throws IOException {
-    accessChecker.requirePermission(getActiveUser(ctx), request,
+    accessChecker.requirePermission(getActiveUser(ctx), getActiveHost(ctx), request,
         tableName, family, qualifier, null, permissions);
   }
 
   public void requireTablePermission(ObserverContext<?> ctx, String request,
       TableName tableName,byte[] family, byte[] qualifier,
       Action... permissions) throws IOException {
-    accessChecker.requireTablePermission(getActiveUser(ctx),
+    accessChecker.requireTablePermission(getActiveUser(ctx), getActiveHost(ctx),
         request, tableName, family, qualifier, permissions);
   }
 
   public void checkLockPermissions(ObserverContext<?> ctx, String namespace,
       TableName tableName, RegionInfo[] regionInfos, String reason)
       throws IOException {
-    accessChecker.checkLockPermissions(getActiveUser(ctx),
+    accessChecker.checkLockPermissions(getActiveUser(ctx), getActiveHost(ctx),
         namespace, tableName, regionInfos, reason);
   }
 
@@ -1391,7 +1395,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     default:
       throw new RuntimeException("Unhandled operation " + opType);
     }
-    AuthResult authResult = permissionGranted(opType, user, env, families, Action.READ);
+    AuthResult authResult = permissionGranted(opType, user, env.getConnection().getS, families, Action.READ);
     Region region = getRegion(env);
     TableName table = getTableName(region);
     Map<ByteRange, Integer> cfVsMaxVersions = Maps.newHashMap();
@@ -1413,7 +1417,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           authResult.setReason("Access allowed with filter");
           // Only wrap the filter if we are enforcing authorizations
           if (authorizationEnabled) {
-            Filter ourFilter = new AccessControlFilter(getAuthManager(), user, table,
+            Filter ourFilter = new AccessControlFilter(getAuthManager(), user, , table,
               AccessControlFilter.Strategy.CHECK_TABLE_AND_CF_ONLY,
               cfVsMaxVersions);
             // wrap any existing filter
@@ -2161,8 +2165,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
         User caller = RpcServer.getRequestUser().orElse(null);
 
         List<UserPermission> perms = null;
-        // Initialize username, cf and cq. Set to null if request doesn't have.
+        // Initialize username, hostSpec cf and cq. Set to null if request doesn't have.
         final String userName = request.hasUserName() ? request.getUserName().toStringUtf8() : null;
+        final InetAddress hostSpec =RpcServer.getRemoteIp();
+        
         final byte[] cf =
             request.hasColumnFamily() ? request.getColumnFamily().toByteArray() : null;
         final byte[] cq =
@@ -2171,7 +2177,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
         if (request.getType() == AccessControlProtos.Permission.Type.Table) {
           final TableName table = request.hasTableName() ?
             ProtobufUtil.toTableName(request.getTableName()) : null;
-          accessChecker.requirePermission(caller, "userPermissions", table, cf, cq, userName,
+          accessChecker.requirePermission(caller, hostSpec, "userPermissions", table, cf, cq, userName,
             Action.ADMIN);
           perms = User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
             @Override
@@ -2188,7 +2194,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           });
         } else if (request.getType() == AccessControlProtos.Permission.Type.Namespace) {
           final String namespace = request.getNamespaceName().toStringUtf8();
-          accessChecker.requireNamespacePermission(caller, "userPermissions",
+          accessChecker.requireNamespacePermission(caller, hostSpec,"userPermissions",
             namespace,userName, Action.ADMIN);
           perms = User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
             @Override
@@ -2211,10 +2217,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
               if (userName != null) {
                 // retrieve permission based on the requested parameters
                 return AccessControlLists.getUserPermissions(regionEnv.getConfiguration(), null,
-                  null, null, userName, true);
+                        null, null, userName, true);
               } else {
                 return AccessControlLists.getUserPermissions(regionEnv.getConfiguration(), null,
-                  null, null, null, false);
+                        null, null, null, false);
               }
             }
           });
@@ -2226,7 +2232,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
             // will help in avoiding any leakage of information about being superusers.
             for (String user : Superusers.getSuperUsers()) {
               perms.add(new UserPermission(Bytes.toBytes(user), AccessControlLists.ACL_TABLE_NAME,
-                  null, Action.values()));
+                      null, Action.values()));
             }
           }
         }
@@ -2585,6 +2591,20 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       return optionalUser.get();
     }
     return userProvider.getCurrent();
+  }
+
+  /*
+   * Returns the remote address for which authorization checks should be applied.
+   * If we are in the context of an RPC call, the remote address is used,
+   * otherwise the current host is used.
+   */
+  private InetAddress getActiveHost(ObserverContext<?> ctx) throws IOException {
+    // for non-rpc handling, fallback to this host
+    Optional<InetAddress> optionalAddress = ctx.getRemoteAddress();
+    if (optionalAddress.isPresent()) {
+      return optionalAddress.get();
+    }
+    return Address.getHostName();
   }
 
   @Override

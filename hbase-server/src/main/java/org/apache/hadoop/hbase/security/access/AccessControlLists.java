@@ -22,6 +22,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -135,7 +136,7 @@ public class AccessControlLists {
     Permission.Action[] actions = userPerm.getActions();
     byte[] rowKey = userPermissionRowKey(userPerm);
     Put p = new Put(rowKey);
-    byte[] key = userPermissionKey(userPerm);
+    byte[] key = userHostPermissionKey(userPerm);
 
     if ((actions == null) || (actions.length == 0)) {
       String msg = "No actions associated with user '" + Bytes.toString(userPerm.getUser()) + "'";
@@ -145,6 +146,7 @@ public class AccessControlLists {
 
     Set<Permission.Action> actionSet = new TreeSet<Permission.Action>();
     if(mergeExistingPermissions){
+      // XXX TODO: Add null?
       List<UserPermission> perms = getUserPermissions(conf, rowKey, null, null, null, false);
       UserPermission currentPerm = null;
       for (UserPermission perm : perms) {
@@ -259,7 +261,7 @@ public class AccessControlLists {
   private static void removePermissionRecord(Configuration conf, UserPermission userPerm, Table t)
       throws IOException {
     Delete d = new Delete(userPermissionRowKey(userPerm));
-    d.addColumns(ACL_LIST_FAMILY, userPermissionKey(userPerm));
+    d.addColumns(ACL_LIST_FAMILY, userHostPermissionKey(userPerm));
     try {
       t.delete(d);
     } finally {
@@ -362,11 +364,11 @@ public class AccessControlLists {
 
   /**
    * Build qualifier key from user permission:
-   *  username
-   *  username,family
-   *  username,family,qualifier
+   *  username,host
+   *  username,host,family
+   *  username,host,family,qualifier
    */
-  static byte[] userPermissionKey(UserPermission userPerm) {
+  static byte[] userHostPermissionKey(UserPermission userPerm) {
     byte[] qualifier = userPerm.getQualifier();
     byte[] family = userPerm.getFamily();
     byte[] key = userPerm.getUser();
@@ -463,7 +465,7 @@ public class AccessControlLists {
   static Map<byte[], ListMultimap<String,TablePermission>> loadAll(
       Configuration conf) throws IOException {
     Map<byte[], ListMultimap<String,TablePermission>> allPerms = new TreeMap<>(Bytes.BYTES_RAWCOMPARATOR);
-
+// XXXX/TODO Need to take a hostSpec
     // do a full scan of _acl_, filtering on only first table region rows
 
     Scan scan = new Scan();
@@ -510,7 +512,7 @@ public class AccessControlLists {
    * </p>
    */
   static ListMultimap<String, TablePermission> getPermissions(Configuration conf, byte[] entryName,
-      Table t, byte[] cf, byte[] cq, String user, boolean hasFilterUser) throws IOException {
+      Table t, byte[] cf, byte[] cq, String user, InetAddress hostSpec, boolean hasFilterUser) throws IOException {
     if (entryName == null) entryName = ACL_GLOBAL_NAME;
     // for normal user tables, we just read the table row from _acl_
     ListMultimap<String, TablePermission> perms = ArrayListMultimap.create();
@@ -527,6 +529,7 @@ public class AccessControlLists {
       row = t.get(get);
     }
     if (!row.isEmpty()) {
+      // XXXX/TODO Need to pass a hostSpec
       perms = parsePermissions(entryName, row, cf, cq, user, hasFilterUser);
     } else {
       LOG.info("No permissions found in " + ACL_TABLE_NAME + " for acl entry "
@@ -537,13 +540,13 @@ public class AccessControlLists {
   }
 
   /**
-   * Returns the currently granted permissions for a given table as the specified user plus
+   * Returns the currently granted permissions for a given table as the specified user, host plus
    * associated permissions.
    */
   static List<UserPermission> getUserTablePermissions(Configuration conf, TableName tableName,
-      byte[] cf, byte[] cq, String userName, boolean hasFilterUser) throws IOException {
+      byte[] cf, byte[] cq, String userName, InetAddress hostSpec, boolean hasFilterUser) throws IOException {
     return getUserPermissions(conf, tableName == null ? null : tableName.getName(), cf, cq,
-      userName, hasFilterUser);
+      userName, hostSpec, hasFilterUser);
   }
 
   /**
@@ -551,25 +554,26 @@ public class AccessControlLists {
    * associated permissions.
    */
   static List<UserPermission> getUserNamespacePermissions(Configuration conf, String namespace,
-      String user, boolean hasFilterUser) throws IOException {
+      String user, InetAddress hostSpec, boolean hasFilterUser) throws IOException {
     return getUserPermissions(conf, Bytes.toBytes(toNamespaceEntry(namespace)), null, null, user,
       hasFilterUser);
   }
 
   /**
    * Returns the currently granted permissions for a given table/namespace with associated
-   * permissions based on the specified column family, column qualifier and user name.
+   * permissions based on the specified column family, column qualifier and user name and access host.
    * @param conf the configuration
    * @param entryName Table name or the namespace
    * @param cf Column family
    * @param cq Column qualifier
    * @param user User name to be filtered from permission as requested
+   * @param hostSpec Host from which the request is incoming
    * @param hasFilterUser true if filter user is provided, otherwise false.
    * @return List of UserPermissions
    * @throws IOException on failure
    */
   static List<UserPermission> getUserPermissions(Configuration conf, byte[] entryName, byte[] cf,
-      byte[] cq, String user, boolean hasFilterUser) throws IOException {
+      byte[] cq, String user, InetAddress hostSpec, boolean hasFilterUser) throws IOException {
     ListMultimap<String, TablePermission> allPerms =
         getPermissions(conf, entryName, null, cf, cq, user, hasFilterUser);
 
@@ -596,6 +600,7 @@ public class AccessControlLists {
    * Parse and filter permission based on the specified column family, column qualifier and user
    * name.
    */
+  // XXXX/TODO Need to take/return a hostSpec
   private static ListMultimap<String, TablePermission> parsePermissions(byte[] entryName,
       Result result, byte[] cf, byte[] cq, String user, boolean hasFilterUser) {
     ListMultimap<String, TablePermission> perms = ArrayListMultimap.create();
@@ -736,7 +741,7 @@ public class AccessControlLists {
 
   /**
    * Writes a set of permissions as {@link org.apache.hadoop.io.Writable} instances and returns the
-   * resulting byte array. Writes a set of permission [user: table permission]
+   * resulting byte array. Writes a set of permission [user@network identifier: table permission]
    */
   public static byte[] writePermissionsAsBytes(ListMultimap<String, TablePermission> perms,
       Configuration conf) {

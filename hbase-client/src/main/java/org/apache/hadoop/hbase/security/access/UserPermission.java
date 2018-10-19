@@ -37,6 +37,7 @@ public class UserPermission extends TablePermission {
   private static final Logger LOG = LoggerFactory.getLogger(UserPermission.class);
 
   private byte[] user;
+  private byte[] hostSpec;
 
   /** Nullary constructor for Writable, do not use */
   public UserPermission() {
@@ -48,63 +49,73 @@ public class UserPermission extends TablePermission {
    * @param user the user
    * @param assigned the list of allowed actions
    */
-  public UserPermission(byte[] user, Action... assigned) {
+  public UserPermission(byte[] user, byte[] hostSpec, Action... assigned) {
     super(null, null, null, assigned);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new instance for the given user,
+   * Creates a new instance for the given user, hostspec
    * matching the actions with the given codes.
    * @param user the user
+   * @param hostSpec the host specification
    * @param actionCodes the list of allowed action codes
    */
-  public UserPermission(byte[] user, byte[] actionCodes) {
+  public UserPermission(byte[] user, byte[] hostSpec, byte[] actionCodes) {
     super(null, null, null, actionCodes);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new instance for the given user.
+   * Creates a new instance for the given user, hostSpec.
    * @param user the user
+   * @param hostSpec the host specification
    * @param namespace
    * @param assigned the list of allowed actions
    */
-  public UserPermission(byte[] user, String namespace, Action... assigned) {
+  public UserPermission(byte[] user, byte[] hostSpec, String namespace, Action... assigned) {
     super(namespace, assigned);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new instance for the given user,
+   * Creates a new instance for the given user, hostSpec,
    * matching the actions with the given codes.
    * @param user the user
+   * @param hostSpec the host specification
    * @param namespace
    * @param actionCodes the list of allowed action codes
    */
-  public UserPermission(byte[] user, String namespace, byte[] actionCodes) {
+  public UserPermission(byte[] user, byte[] hostSpec, String namespace, byte[] actionCodes) {
     super(namespace, actionCodes);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new instance for the given user, table and column family.
+   * Creates a new instance for the given user, hostSpec, table and column family.
    * @param user the user
+   * @param hostSpec the host specification
    * @param table the table
    * @param family the family, can be null if action is allowed over the entire
    *   table
    * @param assigned the list of allowed actions
    */
-  public UserPermission(byte[] user, TableName table, byte[] family,
+  public UserPermission(byte[] user, byte hostSpec[], TableName table, byte[] family,
                         Action... assigned) {
     super(table, family, assigned);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new permission for the given user, table, column family and
+   * Creates a new permission for the given user, hostSpec, table, column family and
    * column qualifier.
    * @param user the user
+   * @param hostSpec the host specification
    * @param table the table
    * @param family the family, can be null if action is allowed over the entire
    *   table
@@ -112,16 +123,18 @@ public class UserPermission extends TablePermission {
    *   over the entire column family
    * @param assigned the list of allowed actions
    */
-  public UserPermission(byte[] user, TableName table, byte[] family,
+  public UserPermission(byte[] user, byte[] hostSpec, TableName table, byte[] family,
                         byte[] qualifier, Action... assigned) {
     super(table, family, qualifier, assigned);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new instance for the given user, table, column family and
+   * Creates a new instance for the given user, hostSpec, table, column family and
    * qualifier, matching the actions with the given codes.
    * @param user the user
+   * @param hostSpec the host specification
    * @param table the table
    * @param family the family, can be null if action is allowed over the entire
    *   table
@@ -129,22 +142,25 @@ public class UserPermission extends TablePermission {
    *   over the entire column family
    * @param actionCodes the list of allowed action codes
    */
-  public UserPermission(byte[] user, TableName table, byte[] family,
+  public UserPermission(byte[] user, byte[] hostSpec, TableName table, byte[] family,
                         byte[] qualifier, byte[] actionCodes) {
     super(table, family, qualifier, actionCodes);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   /**
-   * Creates a new instance for the given user, table, column family and
+   * Creates a new instance for the given user, hostSpec, table, column family and
    * qualifier, matching the actions with the given codes.
    * @param user the user
+   * @param hostSpec the host specification
    * @param perm a TablePermission
    */
-  public UserPermission(byte[] user, TablePermission perm) {
+  public UserPermission(byte[] user, byte[] hostSpec, TablePermission perm) {
     super(perm.getNamespace(), perm.getTableName(), perm.getFamily(), perm.getQualifier(),
         perm.actions);
     this.user = user;
+    this.hostSpec = hostSpec;
   }
 
   public byte[] getUser() {
@@ -160,6 +176,7 @@ public class UserPermission extends TablePermission {
 
   @Override
   public boolean equals(Object obj) {
+    // XXX TODO: Need to understand how we want host matching here
     if (!(obj instanceof UserPermission)) {
       return false;
     }
@@ -175,6 +192,7 @@ public class UserPermission extends TablePermission {
 
   @Override
   public int hashCode() {
+    // XXX TODO: Reevaluate how to do hashing
     final int prime = 37;
     int result = super.hashCode();
     if (user != null) {
@@ -187,10 +205,12 @@ public class UserPermission extends TablePermission {
   public String toString() {
     StringBuilder str = new StringBuilder("UserPermission: ")
         .append("user=").append(Bytes.toString(user))
+        .append("host=").append(Bytes.toString(hostSpec))
         .append(", ").append(super.toString());
     return str.toString();
   }
 
+  // XXX TODO: How to serialize? Write user out and an expected fixed length for hostSpec so we can efficiently lookup/scan?
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);

@@ -101,13 +101,14 @@ public final class AccessChecker {
    * Authorizes that the current user has any of the given permissions to access the table.
    *
    * @param user Active user to which authorization checks should be applied
+   * @param hostSpec The InetAddress host specification of the request
    * @param request Request type.
    * @param tableName   Table requested
    * @param permissions Actions being requested
    * @throws IOException if obtaining the current user fails
    * @throws AccessDeniedException if user has no authorization
    */
-  public void requireAccess(User user, String request, TableName tableName,
+  public void requireAccess(User user, InetAddress hostSpec, String request, TableName tableName,
       Action... permissions) throws IOException {
     if (!authorizationEnabled) {
       return;
@@ -115,7 +116,7 @@ public final class AccessChecker {
     AuthResult result = null;
 
     for (Action permission : permissions) {
-      if (authManager.hasAccess(user, tableName, permission)) {
+      if (authManager.hasAccess(user, hostSpec, tableName, permission)) {
         result = AuthResult.allow(request, "Table permission granted",
             user, permission, tableName, null, null);
         break;
@@ -140,9 +141,9 @@ public final class AccessChecker {
    * @throws IOException if obtaining the current user fails
    * @throws AccessDeniedException if authorization is denied
    */
-  public void requirePermission(User user, String request, String filterUser, Action perm)
+  public void requirePermission(User user, InetAddress hostSpec, String request, String filterUser, Action perm)
       throws IOException {
-    requireGlobalPermission(user, request, perm, null, null, filterUser);
+    requireGlobalPermission(user, hostSpec, request, perm, null, null, filterUser);
   }
 
   /**
@@ -157,7 +158,7 @@ public final class AccessChecker {
    * @param familyMap Affected column families.
    * @param filterUser User name to be filtered from permission as requested
    */
-  public void requireGlobalPermission(User user, String request,
+  public void requireGlobalPermission(User user, InetAddress hostSpec, String request,
       Action perm, TableName tableName,
       Map<byte[], ? extends Collection<byte[]>> familyMap, String filterUser) throws IOException {
     if (!authorizationEnabled) {
@@ -189,35 +190,36 @@ public final class AccessChecker {
    * @param perm      Action being requested
    * @param namespace The given namespace
    */
-  public void requireGlobalPermission(User user, String request, Action perm,
+  public void requireGlobalPermission(User user, InetAddress hostSpec, String request, Action perm,
       String namespace) throws IOException {
     if (!authorizationEnabled) {
       return;
     }
     AuthResult authResult;
-    if (authManager.authorize(user, perm)) {
-      authResult = AuthResult.allow(request, "Global check allowed", user, perm, null);
+    if (authManager.authorize(user, InetAddress hostSpec, perm)) {
+      authResult = AuthResult.allow(request, "Global check allowed", user, hostSpec, perm, null);
       authResult.getParams().setNamespace(namespace);
       logResult(authResult);
     } else {
-      authResult = AuthResult.deny(request, "Global check failed", user, perm, null);
+      authResult = AuthResult.deny(request, "Global check failed", user, hostSpec, perm, null);
       authResult.getParams().setNamespace(namespace);
       logResult(authResult);
       throw new AccessDeniedException(
           "Insufficient permissions for user '" + (user != null ? user.getShortName() : "null")
-              + "' (global, action=" + perm.toString() + ")");
+              + "'@" + hostSpec.toString() + "(global, action=" + perm.toString() + ")");
     }
   }
 
   /**
    * Checks that the user has the given global or namespace permission.
    * @param user Active user to which authorization checks should be applied
+   * @param hostSpec Remote InetAddress from which aremote request is coming
    * @param request Request type
    * @param namespace Name space as requested
    * @param filterUser User name to be filtered from permission as requested
    * @param permissions Actions being requested
    */
-  public void requireNamespacePermission(User user, String request, String namespace,
+  public void requireNamespacePermission(User user, InetAddress hostSpec, String request, String namespace,
       String filterUser, Action... permissions) throws IOException {
     if (!authorizationEnabled) {
       return;
@@ -225,13 +227,13 @@ public final class AccessChecker {
     AuthResult result = null;
 
     for (Action permission : permissions) {
-      if (authManager.authorize(user, namespace, permission)) {
+      if (authManager.authorize(user, hostSpec, namespace, permission)) {
         result =
-            AuthResult.allow(request, "Namespace permission granted", user, permission, namespace);
+            AuthResult.allow(request, "Namespace permission granted", user, hostSpec, permission, namespace);
         break;
       } else {
         // rest of the world
-        result = AuthResult.deny(request, "Insufficient permissions", user, permission, namespace);
+        result = AuthResult.deny(request, "Insufficient permissions", user, hostSpec, permission, namespace);
       }
     }
     result.getParams().addExtraParam("filterUser", filterUser);
@@ -245,13 +247,14 @@ public final class AccessChecker {
    * Checks that the user has the given global or namespace permission.
    *
    * @param user Active user to which authorization checks should be applied
+   * @param hostSpec Remote InetAddress from which aremote request is coming
    * @param request Request type
    * @param namespace  The given namespace
    * @param tableName Table requested
    * @param familyMap    Column family map requested
    * @param permissions Actions being requested
    */
-  public void requireNamespacePermission(User user, String request, String namespace,
+  public void requireNamespacePermission(User user, InetAddress hostSpec, String request, String namespace,
       TableName tableName, Map<byte[], ? extends Collection<byte[]>> familyMap,
       Action... permissions) throws IOException {
     if (!authorizationEnabled) {
@@ -260,14 +263,14 @@ public final class AccessChecker {
     AuthResult result = null;
 
     for (Action permission : permissions) {
-      if (authManager.authorize(user, namespace, permission)) {
+      if (authManager.authorize(user, hostSpec, namespace, permission)) {
         result =
-            AuthResult.allow(request, "Namespace permission granted", user, permission, namespace);
+            AuthResult.allow(request, "Namespace permission granted", user, hostSpec, permission, namespace);
         result.getParams().setTableName(tableName).setFamilies(familyMap);
         break;
       } else {
         // rest of the world
-        result = AuthResult.deny(request, "Insufficient permissions", user, permission, namespace);
+        result = AuthResult.deny(request, "Insufficient permissions", user, hostSpec, permission, namespace);
         result.getParams().setTableName(tableName).setFamilies(familyMap);
       }
     }
@@ -282,6 +285,7 @@ public final class AccessChecker {
    * given table, column family and column qualifier.
    *
    * @param user Active user to which authorization checks should be applied
+   * @param hostSpec Remote InetAddress from which aremote request is coming
    * @param request Request type
    * @param tableName Table requested
    * @param family    Column family requested
@@ -291,7 +295,7 @@ public final class AccessChecker {
    * @throws IOException if obtaining the current user fails
    * @throws AccessDeniedException if user has no authorization
    */
-  public void requirePermission(User user, String request, TableName tableName, byte[] family,
+  public void requirePermission(User user, InetAddress hostSpec, String request, TableName tableName, byte[] family,
       byte[] qualifier, String filterUser, Action... permissions) throws IOException {
     if (!authorizationEnabled) {
       return;
@@ -299,14 +303,14 @@ public final class AccessChecker {
     AuthResult result = null;
 
     for (Action permission : permissions) {
-      if (authManager.authorize(user, tableName, family, qualifier, permission)) {
+      if (authManager.authorize(user, hostSpec, tableName, family, qualifier, permission)) {
         result = AuthResult.allow(request, "Table permission granted",
-            user, permission, tableName, family, qualifier);
+            user, hostSpec, permission, tableName, family, qualifier);
         break;
       } else {
         // rest of the world
         result = AuthResult.deny(request, "Insufficient permissions",
-          user, permission, tableName, family, qualifier);
+          user, hostSpec, permission, tableName, family, qualifier);
       }
     }
     result.getParams().addExtraParam("filterUser", filterUser);
@@ -321,6 +325,7 @@ public final class AccessChecker {
    * given table, column family and column qualifier.
    *
    * @param user Active user to which authorization checks should be applied
+   * @param hostSpec Remote InetAddress from which aremote request is coming
    * @param request Request type
    * @param tableName Table requested
    * @param family    Column family param
@@ -328,8 +333,8 @@ public final class AccessChecker {
    * @throws IOException           if obtaining the current user fails
    * @throws AccessDeniedException if user has no authorization
    */
-  public void requireTablePermission(User user, String request,
-      TableName tableName,byte[] family, byte[] qualifier,
+  public void requireTablePermission(User user, InetAddress hostSpec, 
+      String request, TableName tableName,byte[] family, byte[] qualifier,
       Action... permissions) throws IOException {
     if (!authorizationEnabled) {
       return;
@@ -337,15 +342,15 @@ public final class AccessChecker {
     AuthResult result = null;
 
     for (Action permission : permissions) {
-      if (authManager.authorize(user, tableName, null, null, permission)) {
+      if (authManager.authorize(user, hostSpec, tableName, null, null, permission)) {
         result = AuthResult.allow(request, "Table permission granted",
-            user, permission, tableName, null, null);
+            user, hostSpec, permission, tableName, null, null);
         result.getParams().setFamily(family).setQualifier(qualifier);
         break;
       } else {
         // rest of the world
         result = AuthResult.deny(request, "Insufficient permissions",
-                user, permission, tableName, family, qualifier);
+                user, hostSpec, permission, tableName, family, qualifier);
         result.getParams().setFamily(family).setQualifier(qualifier);
       }
     }
@@ -355,15 +360,15 @@ public final class AccessChecker {
     }
   }
 
-  public void checkLockPermissions(User user, String namespace,
+  public void checkLockPermissions(User user, InetAddress hostSpec, String namespace,
       TableName tableName, RegionInfo[] regionInfos, String reason)
       throws IOException {
     if (namespace != null && !namespace.isEmpty()) {
-      requireNamespacePermission(user, reason, namespace, null, Action.ADMIN, Action.CREATE);
+      requireNamespacePermission(user, hostSpec, reason, namespace, null, Action.ADMIN, Action.CREATE);
     } else if (tableName != null || (regionInfos != null && regionInfos.length > 0)) {
       // So, either a table or regions op. If latter, check perms ons table.
       TableName tn = tableName != null? tableName: regionInfos[0].getTable();
-      requireTablePermission(user, reason, tn, null, null,
+      requireTablePermission(user, hostSpec, reason, tn, null, null,
           Action.ADMIN, Action.CREATE);
     } else {
       throw new DoNotRetryIOException("Invalid lock level when requesting permissions.");
@@ -373,9 +378,10 @@ public final class AccessChecker {
   public static void logResult(AuthResult result) {
     if (AUDITLOG.isTraceEnabled()) {
       AUDITLOG.trace(
-        "Access {} for user {}; reason: {}; remote address: {}; request: {}; context: {}",
+        "Access {} for user {}; host {}; reason: {}; remote address: {}; request: {}; context: {}",
         (result.isAllowed() ? "allowed" : "denied"),
         (result.getUser() != null ? result.getUser().getShortName() : "UNKNOWN"),
+        result.getRemoteAddress().toString(),
         result.getReason(), RpcServer.getRemoteAddress().map(InetAddress::toString).orElse(""),
         result.getRequest(), result.toContextString());
     }
@@ -385,12 +391,12 @@ public final class AccessChecker {
    * Validate the hasPermission operation caller with the filter user. Self check doesn't require
    * any privilege but for others caller must have ADMIN privilege.
    */
-  public User validateCallerWithFilterUser(User caller, TablePermission tPerm, String inputUserName)
+  public User validateCallerWithFilterUser(User caller, InetAddress hostSpec, TablePermission tPerm, String inputUserName)
       throws IOException {
     User filterUser = null;
     if (!caller.getShortName().equals(inputUserName)) {
       // User should have admin privilege if checking permission for other users
-      requirePermission(caller, "hasPermission", tPerm.getTableName(), tPerm.getFamily(),
+      requirePermission(caller, hostSpec, "hasPermission", tPerm.getTableName(), tPerm.getFamily(),
         tPerm.getQualifier(), inputUserName, Action.ADMIN);
       // Initialize user instance for the input user name
       List<String> groups = getUserGroups(inputUserName);
@@ -405,6 +411,8 @@ public final class AccessChecker {
     }
     return filterUser;
   }
+
+  //XXX TODO: Should write validateCallerWithFilterUserAndHost() which takes an inputHostSpec
 
   /**
    * A temporary user class to instantiate User instance based on the name and groups.
