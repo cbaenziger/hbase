@@ -115,6 +115,7 @@ message CheckPermissionsResponse {
 message HasPermissionRequest {
   required TablePermission table_permission = 1;
   required bytes user_name = 2;
+  optional bytes host_spec = 3;
 }
 
 message HasPermissionResponse {

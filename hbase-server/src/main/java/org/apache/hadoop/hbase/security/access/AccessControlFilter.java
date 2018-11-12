@@ -21,6 +21,7 @@ package org.apache.hadoop.hbase.security.access;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
+import java.net.InetAddress;
 
 import org.apache.yetus.audience.InterfaceAudience;
 import org.apache.hadoop.hbase.Cell;
@@ -61,6 +62,7 @@ class AccessControlFilter extends FilterBase {
   private TableAuthManager authManager;
   private TableName table;
   private User user;
+  private InetAddress hostSpec;
   private boolean isSystemTable;
   private Strategy strategy;
   private Map<ByteRange, Integer> cfVsMaxVersions;
@@ -75,11 +77,12 @@ class AccessControlFilter extends FilterBase {
   AccessControlFilter() {
   }
 
-  AccessControlFilter(TableAuthManager mgr, User ugi, TableName tableName,
+  AccessControlFilter(TableAuthManager mgr, User ugi, InetAddress hostSpec, TableName tableName,
       Strategy strategy, Map<ByteRange, Integer> cfVsMaxVersions) {
     authManager = mgr;
     table = tableName;
     user = ugi;
+    this.hostSpec = hostSpec;
     isSystemTable = tableName.isSystemTable();
     this.strategy = strategy;
     this.cfVsMaxVersions = cfVsMaxVersions;
@@ -187,13 +190,14 @@ class AccessControlFilter extends FilterBase {
     return this.authManager.equals(f.authManager) &&
       this.table.equals(f.table) &&
       this.user.equals(f.user) &&
+      this.hostSpec.equals(f.hostSpec) &&
       this.strategy.equals(f.strategy) &&
       this.cfVsMaxVersions.equals(f.cfVsMaxVersions);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(this.authManager, this.table, this.strategy, this.user,
+    return Objects.hash(this.authManager, this.table, this.strategy, this.user, this.hostSpec,
       this.cfVsMaxVersions);
   }
 }

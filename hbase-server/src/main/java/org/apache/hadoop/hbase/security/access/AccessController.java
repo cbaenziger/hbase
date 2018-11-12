@@ -18,6 +18,7 @@
  */
 package org.apache.hadoop.hbase.security.access;
 
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Message;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -39,6 +40,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.hadoop.hbase.ArrayBackedTag;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
@@ -202,7 +204,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   private RegionCoprocessorEnvironment regionEnv;
 
   /** Mapping of scanner instances to the user who created them */
-  private Map<InternalScanner,String> scannerOwners =
+  private Map<InternalScanner, Pair<String, InetAddress>> scannerOwners =
       new MapMaker().weakKeys().makeMap();
 
   private Map<TableName, List<UserPermission>> tableAcls;
@@ -1169,14 +1171,15 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       final SnapshotDescription snapshot, final TableDescriptor hTableDescriptor)
       throws IOException {
     User user = getActiveUser(ctx);
+    InetAddress hostSpec = getActiveHost(ctx);
     if (SnapshotDescriptionUtils.isSnapshotOwner(snapshot, user)
         && hTableDescriptor.getTableName().getNameAsString().equals(snapshot.getTable())) {
       // Snapshot owner is allowed to create a table with the same name as the snapshot he took
       AuthResult result = AuthResult.allow("cloneSnapshot " + snapshot.getName(),
-        "Snapshot owner check allowed", user, null, hTableDescriptor.getTableName(), null);
+        "Snapshot owner check allowed", user, hostSpec, null, hTableDescriptor.getTableName(), null);
       AccessChecker.logResult(result);
     } else {
-      accessChecker.requirePermission(user, "cloneSnapshot " + snapshot.getName(), null,
+      accessChecker.requirePermission(user, hostSpec, "cloneSnapshot " + snapshot.getName(), null,
         Action.ADMIN);
     }
   }
@@ -1186,11 +1189,12 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       final SnapshotDescription snapshot, final TableDescriptor hTableDescriptor)
       throws IOException {
     User user = getActiveUser(ctx);
+    InetAddress hostSpec = getActiveHost(ctx);
     if (SnapshotDescriptionUtils.isSnapshotOwner(snapshot, user)) {
-      accessChecker.requirePermission(user, "restoreSnapshot " + snapshot.getName(),
+      accessChecker.requirePermission(user, hostSpec, "restoreSnapshot " + snapshot.getName(),
         hTableDescriptor.getTableName(), null, null, null, Permission.Action.ADMIN);
     } else {
-      accessChecker.requirePermission(user, "restoreSnapshot " + snapshot.getName(), null,
+      accessChecker.requirePermission(user, hostSpec, "restoreSnapshot " + snapshot.getName(), null,
         Action.ADMIN);
     }
   }
@@ -1199,13 +1203,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   public void preDeleteSnapshot(final ObserverContext<MasterCoprocessorEnvironment> ctx,
       final SnapshotDescription snapshot) throws IOException {
     User user = getActiveUser(ctx);
+    InetAddress hostSpec = getActiveHost(ctx);
     if (SnapshotDescriptionUtils.isSnapshotOwner(snapshot, user)) {
       // Snapshot owner is allowed to delete the snapshot
       AuthResult result = AuthResult.allow("deleteSnapshot " + snapshot.getName(),
-          "Snapshot owner check allowed", user, null, null, null);
+          "Snapshot owner check allowed", user, hostSpec, null, null, null);
       AccessChecker.logResult(result);
     } else {
-      accessChecker.requirePermission(user, "deleteSnapshot " + snapshot.getName(), null,
+      accessChecker.requirePermission(user, hostSpec, "deleteSnapshot " + snapshot.getName(), null,
         Action.ADMIN);
     }
   }
@@ -1382,6 +1387,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       return;
     }
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<byte[]>> families = null;
     switch (opType) {
@@ -1395,7 +1401,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     default:
       throw new RuntimeException("Unhandled operation " + opType);
     }
-    AuthResult authResult = permissionGranted(opType, user, env.getConnection().getS, families, Action.READ);
+    AuthResult authResult = permissionGranted(opType, user, hostSpec, c.getEnvironment(), families, Action.READ);
     Region region = getRegion(env);
     TableName table = getTableName(region);
     Map<ByteRange, Integer> cfVsMaxVersions = Maps.newHashMap();
@@ -1417,7 +1423,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           authResult.setReason("Access allowed with filter");
           // Only wrap the filter if we are enforcing authorizations
           if (authorizationEnabled) {
-            Filter ourFilter = new AccessControlFilter(getAuthManager(), user, , table,
+            Filter ourFilter = new AccessControlFilter(getAuthManager(), user, hostSpec, table,
               AccessControlFilter.Strategy.CHECK_TABLE_AND_CF_ONLY,
               cfVsMaxVersions);
             // wrap any existing filter
@@ -1447,7 +1453,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
         authResult.setReason("Access allowed with filter");
         // Only wrap the filter if we are enforcing authorizations
         if (authorizationEnabled) {
-          Filter ourFilter = new AccessControlFilter(getAuthManager(), user, table,
+          Filter ourFilter = new AccessControlFilter(getAuthManager(), user, hostSpec, table,
             AccessControlFilter.Strategy.CHECK_CELL_DEFAULT, cfVsMaxVersions);
           // wrap any existing filter
           if (filter != null) {
@@ -1495,6 +1501,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       final Put put, final WALEdit edit, final Durability durability)
       throws IOException {
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     checkForReservedTagPresence(user, put);
 
     // Require WRITE permission to the table, CF, or top visible value, if any.
@@ -1506,7 +1513,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<Cell>> families = put.getFamilyCellMap();
     AuthResult authResult = permissionGranted(OpType.PUT,
-        user, env, families, Action.WRITE);
+        user, hostSpec, env, families, Action.WRITE);
     AccessChecker.logResult(authResult);
     if (!authResult.isAllowed()) {
       if (cellFeaturesEnabled && !compatibleEarlyTermination) {
@@ -1551,8 +1558,9 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<Cell>> families = delete.getFamilyCellMap();
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     AuthResult authResult = permissionGranted(OpType.DELETE,
-        user, env, families, Action.WRITE);
+        user, hostSpec, env, families, Action.WRITE);
     AccessChecker.logResult(authResult);
     if (!authResult.isAllowed()) {
       if (cellFeaturesEnabled && !compatibleEarlyTermination) {
@@ -1570,6 +1578,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     if (cellFeaturesEnabled && !compatibleEarlyTermination) {
       TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
       User user = getActiveUser(c);
+      InetAddress hostSpec = getActiveHost(c);
       for (int i = 0; i < miniBatchOp.size(); i++) {
         Mutation m = miniBatchOp.getOperation(i);
         if (m.getAttribute(CHECK_COVERING_PERM) != null) {
@@ -1586,10 +1595,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           if (checkCoveringPermission(user, opType, c.getEnvironment(), m.getRow(),
             m.getFamilyCellMap(), m.getTimestamp(), Action.WRITE)) {
             authResult = AuthResult.allow(opType.toString(), "Covering cell set",
-              user, Action.WRITE, table, m.getFamilyCellMap());
+              user, hostSpec, Action.WRITE, table, m.getFamilyCellMap());
           } else {
             authResult = AuthResult.deny(opType.toString(), "Covering cell set",
-              user, Action.WRITE, table, m.getFamilyCellMap());
+              user, hostSpec, Action.WRITE, table, m.getFamilyCellMap());
           }
           AccessChecker.logResult(authResult);
           if (authorizationEnabled && !authResult.isAllowed()) {
@@ -1617,13 +1626,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       final ByteArrayComparable comparator, final Put put,
       final boolean result) throws IOException {
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     checkForReservedTagPresence(user, put);
 
     // Require READ and WRITE permissions on the table, CF, and KV to update
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<byte[]>> families = makeFamilyMap(family, qualifier);
     AuthResult authResult = permissionGranted(OpType.CHECK_AND_PUT,
-        user, env, families, Action.READ, Action.WRITE);
+        user, hostSpec, env, families, Action.READ, Action.WRITE);
     AccessChecker.logResult(authResult);
     if (!authResult.isAllowed()) {
       if (cellFeaturesEnabled && !compatibleEarlyTermination) {
@@ -1657,13 +1667,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       Map<byte[], ? extends Collection<byte[]>> families = makeFamilyMap(family, qualifier);
       AuthResult authResult = null;
       User user = getActiveUser(c);
+      InetAddress hostSpec = getActiveHost(c);
       if (checkCoveringPermission(user, OpType.CHECK_AND_PUT, c.getEnvironment(), row, families,
           HConstants.LATEST_TIMESTAMP, Action.READ)) {
         authResult = AuthResult.allow(OpType.CHECK_AND_PUT.toString(),
-            "Covering cell set", user, Action.READ, table, families);
+            "Covering cell set", user, hostSpec, Action.READ, table, families);
       } else {
         authResult = AuthResult.deny(OpType.CHECK_AND_PUT.toString(),
-            "Covering cell set", user, Action.READ, table, families);
+            "Covering cell set", user, hostSpec, Action.READ, table, families);
       }
       AccessChecker.logResult(authResult);
       if (authorizationEnabled && !authResult.isAllowed()) {
@@ -1716,13 +1727,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       Map<byte[], ? extends Collection<byte[]>> families = makeFamilyMap(family, qualifier);
       AuthResult authResult = null;
       User user = getActiveUser(c);
+      InetAddress hostSpec = getActiveHost(c);
       if (checkCoveringPermission(user, OpType.CHECK_AND_DELETE, c.getEnvironment(),
           row, families, HConstants.LATEST_TIMESTAMP, Action.READ)) {
         authResult = AuthResult.allow(OpType.CHECK_AND_DELETE.toString(),
-            "Covering cell set", user, Action.READ, table, families);
+            "Covering cell set", user, hostSpec, Action.READ, table, families);
       } else {
         authResult = AuthResult.deny(OpType.CHECK_AND_DELETE.toString(),
-            "Covering cell set", user, Action.READ, table, families);
+            "Covering cell set", user, hostSpec, Action.READ, table, families);
       }
       AccessChecker.logResult(authResult);
       if (authorizationEnabled && !authResult.isAllowed()) {
@@ -1736,12 +1748,13 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   public Result preAppend(ObserverContext<RegionCoprocessorEnvironment> c, Append append)
       throws IOException {
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     checkForReservedTagPresence(user, append);
 
     // Require WRITE permission to the table, CF, and the KV to be appended
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<Cell>> families = append.getFamilyCellMap();
-    AuthResult authResult = permissionGranted(OpType.APPEND, user,
+    AuthResult authResult = permissionGranted(OpType.APPEND, user, hostSpec,
         env, families, Action.WRITE);
     AccessChecker.logResult(authResult);
     if (!authResult.isAllowed()) {
@@ -1774,13 +1787,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
       AuthResult authResult = null;
       User user = getActiveUser(c);
+      InetAddress hostSpec = getActiveHost(c);
       if (checkCoveringPermission(user, OpType.APPEND, c.getEnvironment(), append.getRow(),
           append.getFamilyCellMap(), append.getTimeRange().getMax(), Action.WRITE)) {
         authResult = AuthResult.allow(OpType.APPEND.toString(),
-            "Covering cell set", user, Action.WRITE, table, append.getFamilyCellMap());
+            "Covering cell set", user, hostSpec, Action.WRITE, table, append.getFamilyCellMap());
       } else {
         authResult = AuthResult.deny(OpType.APPEND.toString(),
-            "Covering cell set", user, Action.WRITE, table, append.getFamilyCellMap());
+            "Covering cell set", user, hostSpec, Action.WRITE, table, append.getFamilyCellMap());
       }
       AccessChecker.logResult(authResult);
       if (authorizationEnabled && !authResult.isAllowed()) {
@@ -1796,6 +1810,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       final Increment increment)
       throws IOException {
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     checkForReservedTagPresence(user, increment);
 
     // Require WRITE permission to the table, CF, and the KV to be replaced by
@@ -1803,7 +1818,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<Cell>> families = increment.getFamilyCellMap();
     AuthResult authResult = permissionGranted(OpType.INCREMENT,
-        user, env, families, Action.WRITE);
+        user, hostSpec, env, families, Action.WRITE);
     AccessChecker.logResult(authResult);
     if (!authResult.isAllowed()) {
       if (cellFeaturesEnabled && !compatibleEarlyTermination) {
@@ -1835,13 +1850,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
       AuthResult authResult = null;
       User user = getActiveUser(c);
+      InetAddress hostSpec = getActiveHost(c);
       if (checkCoveringPermission(user, OpType.INCREMENT, c.getEnvironment(), increment.getRow(),
           increment.getFamilyCellMap(), increment.getTimeRange().getMax(), Action.WRITE)) {
         authResult = AuthResult.allow(OpType.INCREMENT.toString(), "Covering cell set",
-            user, Action.WRITE, table, increment.getFamilyCellMap());
+            user, hostSpec, Action.WRITE, table, increment.getFamilyCellMap());
       } else {
         authResult = AuthResult.deny(OpType.INCREMENT.toString(), "Covering cell set",
-            user, Action.WRITE, table, increment.getFamilyCellMap());
+            user, hostSpec, Action.WRITE, table, increment.getFamilyCellMap());
       }
       AccessChecker.logResult(authResult);
       if (authorizationEnabled && !authResult.isAllowed()) {
@@ -1919,9 +1935,11 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
       final Scan scan, final RegionScanner s) throws IOException {
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     if (user != null && user.getShortName() != null) {
       // store reference to scanner owner for later checks
-      scannerOwners.put(s, user.getShortName());
+      Pair<String, InetAddress> scannerOwner = Pair.newPair(user.getShortName(), hostSpec);
+      scannerOwners.put(s, scannerOwner);
     }
     return s;
   }
@@ -1964,9 +1982,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       return;
     }
     String requestUserName = RpcServer.getRequestUserName().orElse(null);
-    String owner = scannerOwners.get(s);
-    if (authorizationEnabled && owner != null && !owner.equals(requestUserName)) {
-      throw new AccessDeniedException("User '"+ requestUserName +"' is not the scanner owner!");
+    InetAddress requestHostSpec = RpcServer.getRemoteIp();
+    Pair<String, InetAddress> owner = scannerOwners.get(s);
+    if (authorizationEnabled && owner != null) {
+      String user = owner.getFirst();
+      InetAddress hostSpec = owner.getSecond();
+      if (!user.equals(requestUserName) || !hostSpec.equals(requestHostSpec)) {
+        throw new AccessDeniedException("User '" + requestUserName + "@" + hostSpec.getHostAddress() + "' is not the scanner owner!");
+      }
     }
   }
 
@@ -1980,8 +2003,9 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   public void preBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
       List<Pair<byte[], String>> familyPaths) throws IOException {
     User user = getActiveUser(ctx);
+    InetAddress hostSpec = getActiveHost(ctx);
     for(Pair<byte[],String> el : familyPaths) {
-      accessChecker.requirePermission(user, "preBulkLoadHFile",
+      accessChecker.requirePermission(user, hostSpec,"preBulkLoadHFile",
         ctx.getEnvironment().getRegion().getTableDescriptor().getTableName(), el.getFirst(), null,
         null, Action.CREATE);
     }
@@ -2052,15 +2076,15 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           LOG.debug("Received request to grant access permission " + perm.toString());
         }
         User caller = RpcServer.getRequestUser().orElse(null);
-
+        InetAddress hostSpec = RpcServer.getRemoteIp();
         switch(request.getUserPermission().getPermission().getType()) {
           case Global :
           case Table :
-            accessChecker.requirePermission(caller, "grant", perm.getTableName(),
+            accessChecker.requirePermission(caller, hostSpec,"grant", perm.getTableName(),
                 perm.getFamily(), perm.getQualifier(), null, Action.ADMIN);
             break;
           case Namespace :
-            accessChecker.requireNamespacePermission(caller, "grant", perm.getNamespace(),
+            accessChecker.requireNamespacePermission(caller, hostSpec,"grant", perm.getNamespace(),
                 null, Action.ADMIN);
            break;
         }
@@ -2110,15 +2134,16 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           LOG.debug("Received request to revoke access permission " + perm.toString());
         }
         User caller = RpcServer.getRequestUser().orElse(null);
+        InetAddress hostSpec = RpcServer.getRemoteIp();
 
         switch(request.getUserPermission().getPermission().getType()) {
           case Global :
           case Table :
-            accessChecker.requirePermission(caller, "revoke", perm.getTableName(), perm.getFamily(),
+            accessChecker.requirePermission(caller, hostSpec, "revoke", perm.getTableName(), perm.getFamily(),
               perm.getQualifier(), null, Action.ADMIN);
             break;
           case Namespace :
-            accessChecker.requireNamespacePermission(caller, "revoke", perm.getNamespace(),
+            accessChecker.requireNamespacePermission(caller, hostSpec,"revoke", perm.getNamespace(),
                 null, Action.ADMIN);
             break;
         }
@@ -2165,9 +2190,9 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
         User caller = RpcServer.getRequestUser().orElse(null);
 
         List<UserPermission> perms = null;
-        // Initialize username, hostSpec cf and cq. Set to null if request doesn't have.
+        // Initialize username, hostSpec, cf and cq. Set to null if request doesn't have.
         final String userName = request.hasUserName() ? request.getUserName().toStringUtf8() : null;
-        final InetAddress hostSpec =RpcServer.getRemoteIp();
+        final InetAddress hostSpec = RpcServer.getRemoteIp();
         
         final byte[] cf =
             request.hasColumnFamily() ? request.getColumnFamily().toByteArray() : null;
@@ -2185,10 +2210,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
               if (cf != null || userName != null) {
                 // retrieve permission based on the requested parameters
                 return AccessControlLists.getUserTablePermissions(regionEnv.getConfiguration(),
-                  table, cf, cq, userName, true);
+                  table, cf, cq, userName, hostSpec,true);
               } else {
                 return AccessControlLists.getUserTablePermissions(regionEnv.getConfiguration(),
-                  table, null, null, null, false);
+                  table, null, null, null, hostSpec,false);
               }
             }
           });
@@ -2202,10 +2227,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
               if (userName != null) {
                 // retrieve permission based on the requested parameters
                 return AccessControlLists.getUserNamespacePermissions(regionEnv.getConfiguration(),
-                  namespace, userName, true);
+                  namespace, userName, hostSpec, true);
               } else {
                 return AccessControlLists.getUserNamespacePermissions(regionEnv.getConfiguration(),
-                  namespace, null, false);
+                  namespace, null, hostSpec,false);
               }
             }
           });
@@ -2217,10 +2242,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
               if (userName != null) {
                 // retrieve permission based on the requested parameters
                 return AccessControlLists.getUserPermissions(regionEnv.getConfiguration(), null,
-                        null, null, userName, true);
+                        null, null, userName, hostSpec,true);
               } else {
                 return AccessControlLists.getUserPermissions(regionEnv.getConfiguration(), null,
-                        null, null, null, false);
+                        null, null, null, hostSpec,false);
               }
             }
           });
@@ -2228,10 +2253,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           // Skip super users when filter user is specified
           if (userName == null) {
             // Adding superusers explicitly to the result set as AccessControlLists do not store
-            // them. Also using acl as table name to be inline with the results of global admin and
-            // will help in avoiding any leakage of information about being superusers.
+            // them; ensure a wildcard (null) hostSpec. Also using acl as table name to be inline with the results
+            // of global admin and will help in avoiding any leakage of information about being superusers.
             for (String user : Superusers.getSuperUsers()) {
-              perms.add(new UserPermission(Bytes.toBytes(user), AccessControlLists.ACL_TABLE_NAME,
+              perms.add(new UserPermission(Bytes.toBytes(user), Bytes.toBytes(new InetAddress(null)), AccessControlLists.ACL_TABLE_NAME,
                       null, Action.values()));
             }
           }
@@ -2259,6 +2284,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     AccessControlProtos.CheckPermissionsResponse response = null;
     try {
       User user = RpcServer.getRequestUser().orElse(null);
+      InetAddress hostSpec = RpcServer.getRemoteIp();
       TableName tableName = regionEnv.getRegion().getTableDescriptor().getTableName();
       for (Permission permission : permissions) {
         if (permission instanceof TablePermission) {
@@ -2284,7 +2310,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
               }
             }
 
-            AuthResult result = permissionGranted("checkPermissions", user, action, regionEnv,
+            AuthResult result = permissionGranted("checkPermissions", user, hostSpec, action, regionEnv,
               regionEnv.getRegion().getRegionInfo().getTable(), familyMap);
             AccessChecker.logResult(result);
             if (!result.isAllowed()) {
@@ -2303,10 +2329,10 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
             AuthResult result;
             if (getAuthManager().authorize(user, action)) {
               result = AuthResult.allow("checkPermissions", "Global action allowed", user,
-                action, null, null);
+                hostSpec, action, null, null);
             } else {
-              result = AuthResult.deny("checkPermissions", "Global action denied", user, action,
-                null, null);
+              result = AuthResult.deny("checkPermissions", "Global action denied", user,
+                  hostSpec, action, null, null);
             }
             AccessChecker.logResult(result);
             if (!result.isAllowed()) {
@@ -2600,11 +2626,11 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
    */
   private InetAddress getActiveHost(ObserverContext<?> ctx) throws IOException {
     // for non-rpc handling, fallback to this host
-    Optional<InetAddress> optionalAddress = ctx.getRemoteAddress();
-    if (optionalAddress.isPresent()) {
-      return optionalAddress.get();
+    Optional<InetAddress> optionalHostSpec = ctx.getRemoteAddress();
+    if (address.isPresent()) {
+      return optionalHostSpec.get();
     }
-    return Address.getHostName();
+    return InetAddress.getLocalHost();
   }
 
   @Override
@@ -2617,11 +2643,12 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       throw new IllegalStateException("Input username cannot be empty");
     }
     final String inputUserName = request.getUserName().toStringUtf8();
+    final InetAddress inputHostSpec = InetAddresses.fromLittleEndianByteArray(request.getHostSpec().toByteArray());
     AccessControlProtos.HasPermissionResponse response = null;
     try {
       User caller = RpcServer.getRequestUser().orElse(null);
       // User instance for the input user name
-      User filterUser = accessChecker.validateCallerWithFilterUser(caller, tPerm, inputUserName);
+      User filterUser = accessChecker.validateCallerWithFilterUser(caller, inputHostSpec, tPerm, inputUserName);
 
       // Initialize family and qualifier map
       Map<byte[], Set<byte[]>> familyMap = new TreeMap<byte[], Set<byte[]>>(Bytes.BYTES_COMPARATOR);
@@ -2638,7 +2665,8 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       // Iterate each action and check whether permission granted
       boolean hasPermission = false;
       for (Action action : tPerm.getActions()) {
-        AuthResult result = permissionGranted("hasPermission", filterUser, action, regionEnv,
+        // XXX inputHostSpec is still correct here, right? (The filter user swap does not matter.)
+        AuthResult result = permissionGranted("hasPermission", filterUser, inputHostSpec, action, regionEnv,
           tPerm.getTableName(), familyMap);
         if (!result.isAllowed()) {
           hasPermission = false;
