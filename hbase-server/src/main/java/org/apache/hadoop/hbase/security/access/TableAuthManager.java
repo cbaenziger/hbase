@@ -308,13 +308,14 @@ public class TableAuthManager implements Closeable {
   }
 
   /**
-   * Authorize a global permission based on ACLs for the given user and the
+   * Authorize a global permission based on ACLs for the given user, requesting host and the
    * user's groups.
    * @param user
+   * @param hostSpec
    * @param action
    * @return true if known and authorized, false otherwise
    */
-  public boolean authorize(User user, Permission.Action action) {
+  public boolean authorize(User user, InetAddress hostSpec, Permission.Action action) {
     if (user == null) {
       return false;
     }
@@ -334,8 +335,19 @@ public class TableAuthManager implements Closeable {
     return false;
   }
 
+  /**
+   * Authorize a specific table, family and qualifier permission based on ACLs for the given user and the
+   * user's groups.
+   * @param perms
+   * @param hostSpec
+   * @param table
+   * @param family
+   * @param qualifier
+   * @param action
+   * @return true if known and authorized, false otherwise
+   */
   private boolean authorize(List<TablePermission> perms,
-		                    InetAddress hostSpec,
+                            InetAddress hostSpec,
                             TableName table, byte[] family,
                             byte[] qualifier, Permission.Action action) {
     if (perms != null) {
@@ -392,7 +404,7 @@ public class TableAuthManager implements Closeable {
 
   public boolean authorize(User user, InetAddress hostSpec, String namespace, Permission.Action action) {
     // Global authorizations supercede namespace level
-    if (authorize(user, action)) {
+    if (authorize(user, hostSpec, action)) {
       return true;
     }
     // Check namespace permissions

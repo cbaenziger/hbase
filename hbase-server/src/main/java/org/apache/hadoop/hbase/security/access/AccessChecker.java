@@ -118,12 +118,12 @@ public final class AccessChecker {
     for (Action permission : permissions) {
       if (authManager.hasAccess(user, hostSpec, tableName, permission)) {
         result = AuthResult.allow(request, "Table permission granted",
-            user, permission, tableName, null, null);
+            user, hostSpec,permission, tableName, null, null);
         break;
       } else {
         // rest of the world
         result = AuthResult.deny(request, "Insufficient permissions",
-            user, permission, tableName, null, null);
+            user, hostSpec, permission, tableName, null, null);
       }
     }
     logResult(result);
@@ -165,10 +165,10 @@ public final class AccessChecker {
       return;
     }
     AuthResult result;
-    if (authManager.authorize(user, perm)) {
-      result = AuthResult.allow(request, "Global check allowed", user, perm, tableName, familyMap);
+    if (authManager.authorize(user, hostSpec, perm)) {
+      result = AuthResult.allow(request, "Global check allowed", user, hostSpec, perm, tableName, familyMap);
     } else {
-      result = AuthResult.deny(request, "Global check failed", user, perm, tableName, familyMap);
+      result = AuthResult.deny(request, "Global check failed", user, hostSpec, perm, tableName, familyMap);
     }
     result.getParams().setTableName(tableName).setFamilies(familyMap);
     result.getParams().addExtraParam("filterUser", filterUser);
@@ -196,7 +196,7 @@ public final class AccessChecker {
       return;
     }
     AuthResult authResult;
-    if (authManager.authorize(user, InetAddress hostSpec, perm)) {
+    if (authManager.authorize(user, hostSpec, perm)) {
       authResult = AuthResult.allow(request, "Global check allowed", user, hostSpec, perm, null);
       authResult.getParams().setNamespace(namespace);
       logResult(authResult);
@@ -405,7 +405,7 @@ public final class AccessChecker {
       // User don't need ADMIN privilege for self check.
       // Setting action as null in AuthResult to display empty action in audit log
       AuthResult result = AuthResult.allow("hasPermission", "Self user validation allowed", caller,
-        null, tPerm.getTableName(), tPerm.getFamily(), tPerm.getQualifier());
+        null, null, tPerm.getTableName(), tPerm.getFamily(), tPerm.getQualifier());
       logResult(result);
       filterUser = caller;
     }

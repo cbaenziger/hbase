@@ -69,6 +69,7 @@ message GlobalPermission {
 
 message UserPermission {
     required bytes user = 1;
+    // XXX Clay should we add a hostSpec here?
     required Permission permission = 3;
 }
 

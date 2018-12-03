@@ -480,7 +480,7 @@ public class AccessControlUtil {
    * @return the converted UserPermission
    */
   public static UserPermission toUserPermission(AccessControlProtos.UserPermission proto) {
-    return new UserPermission(proto.getUser().toByteArray(),
+    return new UserPermission(proto.getUser().toByteArray(), null,
         toTablePermission(proto.getPermission()));
   }
 

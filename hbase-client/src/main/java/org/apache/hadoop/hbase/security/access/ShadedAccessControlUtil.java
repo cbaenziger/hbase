@@ -282,7 +282,7 @@ public class ShadedAccessControlUtil {
    * @return the converted UserPermission
    */
   public static UserPermission toUserPermission(org.apache.hadoop.hbase.shaded.protobuf.generated.AccessControlProtos.UserPermission proto) {
-    return new UserPermission(proto.getUser().toByteArray(),
+    return new UserPermission(proto.getUser().toByteArray(), null,
         toTablePermission(proto.getPermission()));
   }
 }

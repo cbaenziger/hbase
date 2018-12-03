@@ -24,6 +24,7 @@ import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 import java.io.IOException;
+import java.net.UnknownHostException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -291,7 +292,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       for (byte[] entry : entries) {
         currentEntry = entry;
         ListMultimap<String, TablePermission> perms =
-            AccessControlLists.getPermissions(conf, entry, t, null, null, null, false, false);
+            AccessControlLists.getPermissions(conf, entry, t, null, null, null, null, false);
         byte[] serialized = AccessControlLists.writePermissionsAsBytes(perms, conf);
         zkw.writeToZookeeper(entry, serialized);
       }
@@ -689,7 +690,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
           foundColumn = true;
           for (Action action: actions) {
             // Are there permissions for this user for the cell?
-            if (!getAuthManager().authorize(user, getTableName(e), cell, action)) {
+            if (!getAuthManager().authorize(user, RpcServer.getRemoteIp(), getTableName(e), cell, action)) {
               // We can stop if the cell ACL denies access
               return false;
             }
@@ -892,7 +893,8 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
         // default the table owner to current user, if not specified.
         if (owner == null)
           owner = getActiveUser(c).getShortName();
-        final UserPermission userperm = new UserPermission(Bytes.toBytes(owner),
+        // XXX Clay need to determine how default permissions should be handled
+        final UserPermission userperm = new UserPermission(Bytes.toBytes(owner), null,
             desc.getTableName(), null, Action.values());
         // switch to the real hbase master user for doing the RPC on the ACL table
         User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
@@ -945,7 +947,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       @Override
       public Void run() throws Exception {
         List<UserPermission> acls =
-            AccessControlLists.getUserTablePermissions(conf, tableName, null, null, null, false);
+            AccessControlLists.getUserTablePermissions(conf, tableName, null, null, null, null,false);
         if (acls != null) {
           tableAcls.put(tableName, acls);
         }
@@ -994,7 +996,8 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
       @Override
       public Void run() throws Exception {
-        UserPermission userperm = new UserPermission(Bytes.toBytes(owner),
+        // XXX Clay should determine how default permissions are handled
+        UserPermission userperm = new UserPermission(Bytes.toBytes(owner), null,
             currentDesc.getTableName(), null, Action.values());
         try (Table table = c.getEnvironment().getConnection().
             getTable(AccessControlLists.ACL_TABLE_NAME)) {
@@ -1049,7 +1052,8 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   public void preGetLocks(ObserverContext<MasterCoprocessorEnvironment> ctx)
       throws IOException {
     User user = getActiveUser(ctx);
-    accessChecker.requirePermission(user, "getLocks", null, Action.ADMIN);
+    InetAddress hostSpec = getActiveHost(ctx);
+    accessChecker.requirePermission(user,hostSpec, "getLocks", null, Action.ADMIN);
   }
 
   @Override
@@ -1155,14 +1159,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   public void preListSnapshot(ObserverContext<MasterCoprocessorEnvironment> ctx,
       final SnapshotDescription snapshot) throws IOException {
     User user = getActiveUser(ctx);
+    InetAddress hostSpec = getActiveHost(ctx);
     if (SnapshotDescriptionUtils.isSnapshotOwner(snapshot, user)) {
       // list it, if user is the owner of snapshot
       AuthResult result = AuthResult.allow("listSnapshot " + snapshot.getName(),
-          "Snapshot owner check allowed", user, null, null, null);
+          "Snapshot owner check allowed", user, hostSpec, null, null);
       AccessChecker.logResult(result);
     } else {
-      accessChecker.requirePermission(user, "listSnapshot " + snapshot.getName(), null,
-        Action.ADMIN);
+      accessChecker.requirePermission(user, hostSpec, "listSnapshot " + snapshot.getName(), null, Action.ADMIN);
     }
   }
 
@@ -1268,10 +1272,11 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     // of preGetTableDescriptors.
     Iterator<NamespaceDescriptor> itr = descriptors.iterator();
     User user = getActiveUser(ctx);
+    InetAddress hostSpec = getActiveHost(ctx);
     while (itr.hasNext()) {
       NamespaceDescriptor desc = itr.next();
       try {
-        accessChecker.requireNamespacePermission(user, "listNamespaces", desc.getName(), null,
+        accessChecker.requireNamespacePermission(user, hostSpec,"listNamespaces", desc.getName(), null,
           Action.ADMIN);
       } catch (AccessDeniedException e) {
         itr.remove();
@@ -1700,8 +1705,9 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
     RegionCoprocessorEnvironment env = c.getEnvironment();
     Map<byte[],? extends Collection<byte[]>> families = makeFamilyMap(family, qualifier);
     User user = getActiveUser(c);
+    InetAddress hostSpec = getActiveHost(c);
     AuthResult authResult = permissionGranted(
-        OpType.CHECK_AND_DELETE, user, env, families, Action.READ, Action.WRITE);
+        OpType.CHECK_AND_DELETE, user,hostSpec, env, families, Action.READ, Action.WRITE);
     AccessChecker.logResult(authResult);
     if (!authResult.isAllowed()) {
       if (cellFeaturesEnabled && !compatibleEarlyTermination) {
@@ -2235,7 +2241,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
             }
           });
         } else {
-          accessChecker.requirePermission(caller, "userPermissions", userName, Action.ADMIN);
+          accessChecker.requirePermission(caller, hostSpec, "userPermissions", userName, Action.ADMIN);
           perms = User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
             @Override
             public List<UserPermission> run() throws Exception {
@@ -2256,7 +2262,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
             // them; ensure a wildcard (null) hostSpec. Also using acl as table name to be inline with the results
             // of global admin and will help in avoiding any leakage of information about being superusers.
             for (String user : Superusers.getSuperUsers()) {
-              perms.add(new UserPermission(Bytes.toBytes(user), Bytes.toBytes(new InetAddress(null)), AccessControlLists.ACL_TABLE_NAME,
+              perms.add(new UserPermission(Bytes.toBytes(user), null, AccessControlLists.ACL_TABLE_NAME,
                       null, Action.values()));
             }
           }
@@ -2327,7 +2333,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
 
           for (Action action : permission.getActions()) {
             AuthResult result;
-            if (getAuthManager().authorize(user, action)) {
+            if (getAuthManager().authorize(user, hostSpec, action)) {
               result = AuthResult.allow("checkPermissions", "Global action allowed", user,
                 hostSpec, action, null, null);
             } else {
@@ -2627,7 +2633,7 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
   private InetAddress getActiveHost(ObserverContext<?> ctx) throws IOException {
     // for non-rpc handling, fallback to this host
     Optional<InetAddress> optionalHostSpec = ctx.getRemoteAddress();
-    if (address.isPresent()) {
+    if (optionalHostSpec.isPresent()) {
       return optionalHostSpec.get();
     }
     return InetAddress.getLocalHost();
@@ -2643,7 +2649,14 @@ public class AccessController implements MasterCoprocessor, RegionCoprocessor,
       throw new IllegalStateException("Input username cannot be empty");
     }
     final String inputUserName = request.getUserName().toStringUtf8();
-    final InetAddress inputHostSpec = InetAddresses.fromLittleEndianByteArray(request.getHostSpec().toByteArray());
+    InetAddress inputHostSpec;
+    try {
+      inputHostSpec = InetAddresses.fromLittleEndianByteArray(request.getHostSpec().toByteArray());
+    } catch (UnknownHostException e) {
+      // Create an InetAddress for 0.0.0.0 as a null address if one is unspecified
+      inputHostSpec = InetAddresses.forString("0.0.0.0");
+    }
+
     AccessControlProtos.HasPermissionResponse response = null;
     try {
       User caller = RpcServer.getRequestUser().orElse(null);

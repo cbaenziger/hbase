@@ -95,7 +95,7 @@ public class ObserverContextImpl<E extends CoprocessorEnvironment> implements Ob
 
   @Override
   public Optional<InetAddress> getRemoteAddress() {
-    return Optional.ofNullable(caller);
+    return Optional.ofNullable(hostSpec);
   }
 
   /**
@@ -111,7 +111,7 @@ public class ObserverContextImpl<E extends CoprocessorEnvironment> implements Ob
   // TODO: Remove this method, ObserverContext should not depend on RpcServer
   // XXX TODO: Understand Gary's about RpcServer comment from HBASE-16217 Pass through the calling user in ObserverContext above
   public static <E extends CoprocessorEnvironment> ObserverContext<E> createAndPrepare(E env) {
-    ObserverContextImpl<E> ctx = new ObserverContextImpl<>(RpcServer.getRequestUser().orElse(null), RpcServer.getRemoteAddress());
+    ObserverContextImpl<E> ctx = new ObserverContextImpl<>(RpcServer.getRequestUser().orElse(null), RpcServer.getRemoteAddress().orElse(null));
     ctx.prepare(env);
     return ctx;
   }

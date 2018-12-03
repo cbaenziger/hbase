@@ -104,7 +104,7 @@ public class UserPermission extends TablePermission {
    *   table
    * @param assigned the list of allowed actions
    */
-  public UserPermission(byte[] user, byte hostSpec[], TableName table, byte[] family,
+  public UserPermission(byte[] user, byte[] hostSpec, TableName table, byte[] family,
                         Action... assigned) {
     super(table, family, assigned);
     this.user = user;

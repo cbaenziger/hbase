@@ -147,7 +147,8 @@ public class AccessControlLists {
     Set<Permission.Action> actionSet = new TreeSet<Permission.Action>();
     if(mergeExistingPermissions){
       // XXX TODO: Add null?
-      List<UserPermission> perms = getUserPermissions(conf, rowKey, null, null, null, false);
+      // XXX Clay need to pass hostSpec?
+      List<UserPermission> perms = getUserPermissions(conf, rowKey, null, null, null, null, false);
       UserPermission currentPerm = null;
       for (UserPermission perm : perms) {
         if (Bytes.equals(perm.getUser(), userPerm.getUser())
@@ -231,8 +232,9 @@ public class AccessControlLists {
       removePermissionRecord(conf, userPerm, t);
     } else {
       // Get all the global user permissions from the acl table
+      // XXX Clay: need a way to pass hostSpec
       List<UserPermission> permsList =
-          getUserPermissions(conf, userPermissionRowKey(userPerm), null, null, null, false);
+          getUserPermissions(conf, userPermissionRowKey(userPerm), null, null, null, null, false);
       List<Permission.Action> remainingActions = new ArrayList<>();
       List<Permission.Action> dropActions = Arrays.asList(userPerm.getActions());
       for (UserPermission perm : permsList) {
@@ -493,15 +495,17 @@ public class AccessControlLists {
 
   public static ListMultimap<String, TablePermission> getTablePermissions(Configuration conf,
       TableName tableName) throws IOException {
+    // XXX Clay need a way to pass hostSpec
     return getPermissions(conf, tableName != null ? tableName.getName() : null, null, null, null,
-      null, false);
+      null, null,false);
   }
 
   @VisibleForTesting
   public static ListMultimap<String, TablePermission> getNamespacePermissions(Configuration conf,
       String namespace) throws IOException {
+    // XXX Clay need a way to pass hostSpec
     return getPermissions(conf, Bytes.toBytes(toNamespaceEntry(namespace)), null, null, null, null,
-      false);
+      null, false);
   }
 
   /**
@@ -555,8 +559,9 @@ public class AccessControlLists {
    */
   static List<UserPermission> getUserNamespacePermissions(Configuration conf, String namespace,
       String user, InetAddress hostSpec, boolean hasFilterUser) throws IOException {
+    // XXX Clay need a way to pass hostSpec
     return getUserPermissions(conf, Bytes.toBytes(toNamespaceEntry(namespace)), null, null, user,
-      hasFilterUser);
+      null, hasFilterUser);
   }
 
   /**
@@ -575,18 +580,20 @@ public class AccessControlLists {
   static List<UserPermission> getUserPermissions(Configuration conf, byte[] entryName, byte[] cf,
       byte[] cq, String user, InetAddress hostSpec, boolean hasFilterUser) throws IOException {
     ListMultimap<String, TablePermission> allPerms =
-        getPermissions(conf, entryName, null, cf, cq, user, hasFilterUser);
+        getPermissions(conf, entryName, null, cf, cq, user, hostSpec, hasFilterUser);
 
     List<UserPermission> perms = new ArrayList<>();
     if (isNamespaceEntry(entryName)) { // Namespace
       for (Map.Entry<String, TablePermission> entry : allPerms.entries()) {
-        UserPermission up = new UserPermission(Bytes.toBytes(entry.getKey()),
+        // XXX Clay need a way to pass hostSpec
+        UserPermission up = new UserPermission(Bytes.toBytes(entry.getKey()), null,
             entry.getValue().getNamespace(), entry.getValue().getActions());
         perms.add(up);
       }
     } else { // Table
       for (Map.Entry<String, TablePermission> entry : allPerms.entries()) {
-        UserPermission up = new UserPermission(Bytes.toBytes(entry.getKey()),
+        // XXX Clay need a way to pass hostSpec
+        UserPermission up = new UserPermission(Bytes.toBytes(entry.getKey()), null,
             entry.getValue().getTableName(), entry.getValue().getFamily(),
             entry.getValue().getQualifier(), entry.getValue().getActions());
         perms.add(up);

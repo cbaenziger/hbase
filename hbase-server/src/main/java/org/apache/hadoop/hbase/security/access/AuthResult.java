@@ -53,7 +53,7 @@ public class AuthResult {
   private final byte[] qualifier;
   private final Map<byte[], ? extends Collection<?>> families;
 
-  public AuthResult(boolean allowed, String request, String reason, InetAddress hostSpec, User user,
+  public AuthResult(boolean allowed, String request, String reason, User user,
                     InetAddress hostSpec, Permission.Action action, TableName table, byte[] family, byte[] qualifier) {
     this.allowed = allowed;
     this.request = request;
@@ -226,34 +226,34 @@ public class AuthResult {
 
   public static AuthResult allow(String request, String reason, User user, InetAddress hostSpec,
       Permission.Action action, String namespace) {
-    return new AuthResult(true, request, reason, user, action, namespace);
+    return new AuthResult(true, request, reason, user, hostSpec, action, namespace);
   }
 
   public static AuthResult allow(String request, String reason, User user, InetAddress hostSpec,
       Permission.Action action, TableName table, byte[] family, byte[] qualifier) {
-    return new AuthResult(true, request, reason, user, action, table, family, qualifier);
+    return new AuthResult(true, request, reason, user, hostSpec, action, table, family, qualifier);
   }
 
   public static AuthResult allow(String request, String reason, User user, InetAddress hostSpec,
       Permission.Action action, TableName table,
       Map<byte[], ? extends Collection<?>> families) {
-    return new AuthResult(true, request, reason, user, action, table, families);
+    return new AuthResult(true, request, reason, user, hostSpec, action, table, families);
   }
 
   public static AuthResult deny(String request, String reason, User user, InetAddress hostSpec,
       Permission.Action action, String namespace) {
-    return new AuthResult(false, request, reason, user, action, namespace);
+    return new AuthResult(false, request, reason, user, hostSpec, action, namespace);
   }
 
   public static AuthResult deny(String request, String reason, User user, InetAddress hostSpec,
       Permission.Action action, TableName table, byte[] family, byte[] qualifier) {
-    return new AuthResult(false, request, reason, user, action, table, family, qualifier);
+    return new AuthResult(false, request, reason, user, hostSpec, action, table, family, qualifier);
   }
 
   public static AuthResult deny(String request, String reason, User user, InetAddress hostSpec,
         Permission.Action action, TableName table,
         Map<byte[], ? extends Collection<?>> families) {
-    return new AuthResult(false, request, reason, user, action, table, families);
+    return new AuthResult(false, request, reason, user, hostSpec, action, table, families);
   }
 
   public String toFamilyString() {

@@ -500,7 +500,7 @@ public abstract class CoprocessorHost<C extends Coprocessor, E extends Coprocess
     }
 
     ObserverOperation(ObserverGetter<C, O> observerGetter, User user, boolean bypassable) {
-      super(user != null? user: RpcServer.getRequestUser().orElse(null), bypassable);
+      super(user != null? user: RpcServer.getRequestUser().orElse(null), RpcServer.getRemoteAddress().orElse(null), bypassable);
       this.observerGetter = observerGetter;
     }
 
