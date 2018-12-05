@@ -143,15 +143,15 @@ public class TestTablePermissions {
     try (Connection connection = ConnectionFactory.createConnection(conf)) {
       // add some permissions
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("george"), TEST_TABLE, null, (byte[])null,
+          new UserPermission(Bytes.toBytes("george"), null, TEST_TABLE, null, (byte[])null,
               UserPermission.Action.READ, UserPermission.Action.WRITE),
               connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("hubert"), TEST_TABLE, null, (byte[])null,
+          new UserPermission(Bytes.toBytes("hubert"), null, TEST_TABLE, null, (byte[])null,
               UserPermission.Action.READ),
           connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("humphrey"),
+          new UserPermission(Bytes.toBytes("humphrey"), null,
               TEST_TABLE, TEST_FAMILY, TEST_QUALIFIER,
               UserPermission.Action.READ),
           connection.getTable(AccessControlLists.ACL_TABLE_NAME));
@@ -211,7 +211,7 @@ public class TestTablePermissions {
     try (Connection connection = ConnectionFactory.createConnection(conf);
         Table table = connection.getTable(AccessControlLists.ACL_TABLE_NAME)) {
       AccessControlLists.addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("hubert"), TEST_TABLE2, null, (byte[])null,
+          new UserPermission(Bytes.toBytes("hubert"), null, TEST_TABLE2, null, (byte[])null,
               TablePermission.Action.READ, TablePermission.Action.WRITE), table);
     }
     // check full load
@@ -244,18 +244,18 @@ public class TestTablePermissions {
     Configuration conf = UTIL.getConfiguration();
     try (Connection connection = ConnectionFactory.createConnection(conf)) {
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("albert"), TEST_TABLE, null,
+          new UserPermission(Bytes.toBytes("albert"), null, TEST_TABLE, null,
               (byte[])null, TablePermission.Action.READ), connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("betty"), TEST_TABLE, null,
+          new UserPermission(Bytes.toBytes("betty"), null, TEST_TABLE, null,
               (byte[])null, TablePermission.Action.READ,
               TablePermission.Action.WRITE), connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("clark"),
+          new UserPermission(Bytes.toBytes("clark"), null,
               TEST_TABLE, TEST_FAMILY,
               TablePermission.Action.READ), connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("dwight"),
+          new UserPermission(Bytes.toBytes("dwight"),null,
               TEST_TABLE, TEST_FAMILY, TEST_QUALIFIER,
               TablePermission.Action.WRITE), connection.getTable(AccessControlLists.ACL_TABLE_NAME));
     }
@@ -393,13 +393,13 @@ public class TestTablePermissions {
     // add some permissions
     try (Connection connection = ConnectionFactory.createConnection(conf)) {
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("user1"),
+          new UserPermission(Bytes.toBytes("user1"), null,
               Permission.Action.READ, Permission.Action.WRITE), connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("user2"),
+          new UserPermission(Bytes.toBytes("user2"),null,
               Permission.Action.CREATE), connection.getTable(AccessControlLists.ACL_TABLE_NAME));
       addUserPermission(conf,
-          new UserPermission(Bytes.toBytes("user3"),
+          new UserPermission(Bytes.toBytes("user3"),null,
               Permission.Action.ADMIN, Permission.Action.READ, Permission.Action.CREATE),
           connection.getTable(AccessControlLists.ACL_TABLE_NAME));
     }
@@ -434,15 +434,15 @@ public class TestTablePermissions {
     TableAuthManager authManager = TableAuthManager.getOrCreate(ZKW, conf);
     // currently running user is the system user and should have global admin perms
     User currentUser = User.getCurrent();
-    assertTrue(authManager.authorize(currentUser, Permission.Action.ADMIN));
+    assertTrue(authManager.authorize(currentUser,null, Permission.Action.ADMIN));
     try (Connection connection = ConnectionFactory.createConnection(conf)) {
       for (int i=1; i<=50; i++) {
-        addUserPermission(conf, new UserPermission(Bytes.toBytes("testauth"+i),
+        addUserPermission(conf, new UserPermission(Bytes.toBytes("testauth"+i), null,
             Permission.Action.ADMIN, Permission.Action.READ, Permission.Action.WRITE),
             connection.getTable(AccessControlLists.ACL_TABLE_NAME));
         // make sure the system user still shows as authorized
         assertTrue("Failed current user auth check on iter "+i,
-            authManager.authorize(currentUser, Permission.Action.ADMIN));
+            authManager.authorize(currentUser, null, Permission.Action.ADMIN));
       }
     }
   }

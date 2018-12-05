@@ -1588,7 +1588,7 @@ public class TestAccessController extends SecureTestUtil {
       }
 
       UserPermission ownerperm =
-          new UserPermission(Bytes.toBytes(USER_OWNER.getName()), tableName, null, Action.values());
+          new UserPermission(Bytes.toBytes(USER_OWNER.getName()), null, tableName, null, Action.values());
       assertTrue("Owner should have all permissions on table",
         hasFoundUserPermission(ownerperm, perms));
 
@@ -1596,7 +1596,7 @@ public class TestAccessController extends SecureTestUtil {
       byte[] userName = Bytes.toBytes(user.getShortName());
 
       UserPermission up =
-          new UserPermission(userName, tableName, family1, qualifier, Permission.Action.READ);
+          new UserPermission(userName, null, tableName, family1, qualifier, Permission.Action.READ);
       assertFalse("User should not be granted permission: " + up.toString(),
         hasFoundUserPermission(up, perms));
 
@@ -1615,12 +1615,12 @@ public class TestAccessController extends SecureTestUtil {
       }
 
       UserPermission upToVerify =
-          new UserPermission(userName, tableName, family1, qualifier, Permission.Action.READ);
+          new UserPermission(userName, null, tableName, family1, qualifier, Permission.Action.READ);
       assertTrue("User should be granted permission: " + upToVerify.toString(),
         hasFoundUserPermission(upToVerify, perms));
 
       upToVerify =
-          new UserPermission(userName, tableName, family1, qualifier, Permission.Action.WRITE);
+          new UserPermission(userName, null, tableName, family1, qualifier, Permission.Action.WRITE);
       assertFalse("User should not be granted permission: " + upToVerify.toString(),
         hasFoundUserPermission(upToVerify, perms));
 
@@ -1639,7 +1639,7 @@ public class TestAccessController extends SecureTestUtil {
       }
 
       upToVerify =
-          new UserPermission(userName, tableName, family1, qualifier, Permission.Action.WRITE,
+          new UserPermission(userName, null, tableName, family1, qualifier, Permission.Action.WRITE,
               Permission.Action.READ);
       assertTrue("User should be granted permission: " + upToVerify.toString(),
         hasFoundUserPermission(upToVerify, perms));
@@ -1679,7 +1679,7 @@ public class TestAccessController extends SecureTestUtil {
       }
 
       UserPermission newOwnerperm =
-          new UserPermission(Bytes.toBytes(newOwner.getName()), tableName, null, Action.values());
+          new UserPermission(Bytes.toBytes(newOwner.getName()), null, tableName, null, Action.values());
       assertTrue("New owner should have all permissions on table",
         hasFoundUserPermission(newOwnerperm, perms));
     } finally {
@@ -1703,11 +1703,11 @@ public class TestAccessController extends SecureTestUtil {
 
     Collection<String> superUsers = Superusers.getSuperUsers();
     List<UserPermission> adminPerms = new ArrayList<>(superUsers.size() + 1);
-    adminPerms.add(new UserPermission(Bytes.toBytes(USER_ADMIN.getShortName()),
+    adminPerms.add(new UserPermission(Bytes.toBytes(USER_ADMIN.getShortName()), null,
       AccessControlLists.ACL_TABLE_NAME, null, null, Bytes.toBytes("ACRW")));
 
     for(String user: superUsers) {
-      adminPerms.add(new UserPermission(Bytes.toBytes(user), AccessControlLists.ACL_TABLE_NAME,
+      adminPerms.add(new UserPermission(Bytes.toBytes(user), null, AccessControlLists.ACL_TABLE_NAME,
           null, null, Action.values()));
     }
     assertTrue("Only super users, global users and user admin has permission on table hbase:acl " +

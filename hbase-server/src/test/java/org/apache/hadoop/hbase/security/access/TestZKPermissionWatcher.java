@@ -98,22 +98,22 @@ public class TestZKPermissionWatcher {
     User george = User.createUserForTesting(conf, "george", new String[] { });
     User hubert = User.createUserForTesting(conf, "hubert", new String[] { });
 
-    assertFalse(AUTH_A.authorizeUser(george, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(george,null, TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_A.authorizeUser(george, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(george, null, TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertFalse(AUTH_A.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_A.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
 
-    assertFalse(AUTH_B.authorizeUser(george, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_B.authorizeUser(george, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertFalse(AUTH_B.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_B.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
 
     // update ACL: george RW
@@ -132,21 +132,21 @@ public class TestZKPermissionWatcher {
     Thread.sleep(1000);
 
     // check it
-    assertTrue(AUTH_A.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_A.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertTrue(AUTH_A.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_A.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertTrue(AUTH_B.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_B.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertTrue(AUTH_B.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_B.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertFalse(AUTH_A.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_A.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertFalse(AUTH_B.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_B.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
 
     // update ACL: hubert R
@@ -164,21 +164,21 @@ public class TestZKPermissionWatcher {
     Thread.sleep(1000);
 
     // check it
-    assertTrue(AUTH_A.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_A.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertTrue(AUTH_A.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_A.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertTrue(AUTH_B.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_B.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertTrue(AUTH_B.authorizeUser(george, TEST_TABLE, null,
+    assertTrue(AUTH_B.authorizeUser(george,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertTrue(AUTH_A.authorizeUser(hubert, TEST_TABLE, null,
+    assertTrue(AUTH_A.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_A.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_A.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.WRITE));
-    assertTrue(AUTH_B.authorizeUser(hubert, TEST_TABLE, null,
+    assertTrue(AUTH_B.authorizeUser(hubert,null,  TEST_TABLE, null,
       TablePermission.Action.READ));
-    assertFalse(AUTH_B.authorizeUser(hubert, TEST_TABLE, null,
+    assertFalse(AUTH_B.authorizeUser(hubert,null, TEST_TABLE, null,
       TablePermission.Action.WRITE));
   }
 }
