@@ -28,8 +28,8 @@ import org.apache.hadoop.hbase.shaded.protobuf.generated.ComparatorProtos;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
- * A binary comparator which lexicographically compares against the specified
- * byte array using {@link org.apache.hadoop.hbase.util.Bytes#compareTo(byte[], byte[])}.
+ * A filter, based on ByteArrayComparable, which compares against
+ * a null byte array using {@link org.apache.hadoop.hbase.util.Bytes#compareTo(byte[0], byte[])}.
  */
 @InterfaceAudience.Public
 @SuppressWarnings("ComparableType") // Should this move to Comparator usage?
