@@ -152,6 +152,9 @@ To check for existing issues which you can tackle as a beginner, search for link
 * *Minor*: Useful enhancements and annoying but not damaging bugs.
 * *Trivial*: Useful enhancements but generally cosmetic.
 
+.Organizing Tickets
+To help others find tickets which may have changed a sub-system, see which component(s) in JIRA can help describe the relevant HBase component(s) your ticket relates to. The only label(s) to use in JIRA https://lists.apache.org/thread.html/e398d0e8ce5c5bc1be69f469ad4c0c5e4f7cb752e924adcdd45d4a94%40%3Cdev.hbase.apache.org%3E[should be] generic and non-HBase specific concepts, such as the "beginner" label.
+
 .Code Blocks in Jira Comments
 ====
 A commonly used macro in Jira is {code}. Everything inside the tags is preformatted, as in this example.
@@ -164,6 +167,25 @@ code snippet
 {code}
 ----
 ====
+
+==== Guidelines for closing issues
+
+Inevitably some issues duplicate others, or an issue may become obsolete; some tickets are eventually fixed by yet another ticket, while others can’t be reproduced; similarly, some tickets need more detail, and so on. It’s useful to help identify these issues and resolve them. Contributors are able to directly resolve JIRAs. Use judgment in determining whether you are quite confident the issue should be resolved, although changes can be easily undone. If in doubt, just leave a comment on the JIRA. Hygiene allows users and developers to keep track of what needs to be worked on or the direction of active developments.
+
+.https://lists.apache.org/thread.html/24e2f791b2c56f4881af1f7e0d72c54dbf9ebd92ca7e1fbc52258361%40%3Cdev.hbase.apache.org%3E[Taxonomy] for closure type:
+* *Fixed*: if the described issue is known fixed, and refer to where the work was done.
+** Set Fix Version(s)
+** Set Assignee to the person who most contributed to the resolution
+** In case several people contributed, prefer to assign to the more "junior", non-committer contributor
+* *Cannot Reproduce*: if the issue describes a testable condition but current code does not exhibit the problem; for example, an old report of a failing unit test that is no longer failing.
+* *Duplicate*: if the issue is the same as or a subset of another issue
+** Make sure to link to the JIRA it duplicates
+** Prefer to resolve the issue that has less activity or discussion as the duplicate
+* *Not A Problem*: if the issue in its preset state is nor actionable and does not describe a testable condition.
+* *Invalid*: for those tickets which do not coherently describe any action. Often seen when a support question is attempted in JIRA rather than on a mailing list.
+* *Later*: if the issue is a nice idea or a brainstorming issue that didn’t go anywhere but might be worth revisiting someday. A timer of one-year is a good threshold on when to close such a ticket.
+* *Incomplete*: a catch all resolution if work on the issue was started and then abandoned. Again a timer of one-year is a good threshold on when to close such a ticket.
+* *Won't Fix*: if the issue is a coherent issue, but there is a clear indication that there is not support or community interest in acting on the ticket.
 
 [[repos]]
 == Apache HBase Repositories
